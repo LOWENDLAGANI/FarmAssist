@@ -9,6 +9,9 @@
  *  • Circular arc gauge with value and unit
  *  • Status text (Good / Optimal / Warning)
  *  • Optimal range text
+ *
+ * Props:
+ *  • compact — smaller gauge for mobile screens
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -24,6 +27,8 @@ interface SensorCardProps {
   value: number | null;
   isSelected: boolean;
   onSelect: (key: SensorKey) => void;
+  /** Use smaller gauge for mobile */
+  compact?: boolean;
 }
 
 export default function SensorCard({
@@ -31,6 +36,7 @@ export default function SensorCard({
   value,
   isSelected,
   onSelect,
+  compact = false,
 }: SensorCardProps) {
   const meta = SENSOR_META[sensorKey];
 
@@ -55,7 +61,7 @@ export default function SensorCard({
   return (
     <button
       onClick={() => onSelect(sensorKey)}
-      className={`group flex flex-col items-center rounded-2xl border p-5 transition-all duration-200 ${
+      className={`group flex flex-col items-center rounded-2xl border p-3 transition-all duration-200 sm:p-5 ${
         isSelected
           ? "border-cyan-500/40 bg-[#0d1f35] shadow-lg shadow-cyan-500/10"
           : "border-cyan-900/20 bg-[#0c1a2e] hover:border-cyan-800/30 hover:bg-[#0f2240]"
@@ -65,7 +71,7 @@ export default function SensorCard({
     >
       {/* ── Label ── */}
       <span
-        className="mb-3 text-sm font-medium"
+        className={`font-medium ${compact ? "mb-1 text-xs" : "mb-3 text-sm"}`}
         style={{ color: meta.hexColor }}
       >
         {meta.label}
@@ -79,16 +85,16 @@ export default function SensorCard({
         color={meta.hexColor}
         unit={meta.unit}
         decimals={sensorKey === "temperature" ? 1 : 0}
-        size={160}
+        size={compact ? 120 : 160}
       />
 
       {/* ── Status ── */}
-      <span className={`mt-2 text-sm font-semibold ${statusColor}`}>
+      <span className={`mt-1 text-xs font-semibold sm:mt-2 sm:text-sm ${statusColor}`}>
         {statusText}
       </span>
 
       {/* ── Optimal Range ── */}
-      <span className="mt-1 text-xs text-slate-500">
+      <span className="mt-0.5 text-[10px] text-slate-500 sm:mt-1 sm:text-xs">
         Range {meta.optimalRange[0]}–
         {meta.optimalRange[1]}
         {meta.unit}

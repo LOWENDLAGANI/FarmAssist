@@ -21,9 +21,9 @@ export default function TopBar({ status, lastUpdated }: TopBarProps) {
   const isStale = status === "stale";
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-cyan-900/30 bg-[#0a1628] px-6">
+    <header className="flex h-12 items-center justify-between border-b border-cyan-900/30 bg-[#0a1628] px-4 sm:h-14 sm:px-6">
       {/* ── Left: Title ── */}
-      <h1 className="text-lg font-semibold text-white">
+      <h1 className="text-base font-semibold text-white sm:text-lg">
         Farm Assistant
       </h1>
 

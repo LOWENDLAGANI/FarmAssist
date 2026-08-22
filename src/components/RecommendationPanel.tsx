@@ -22,6 +22,7 @@ import {
   Waves,
   Wind,
   Snowflake,
+  Sun,
   CheckCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -35,6 +36,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Waves,
   Wind,
   Snowflake,
+  Sun,
 };
 
 const SEVERITY_STYLES: Record<

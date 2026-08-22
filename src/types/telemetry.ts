@@ -6,9 +6,7 @@
  * These types model the shapes stored in Firebase Realtime Database by the ESP
  * microcontroller and consumed by the React dashboard.
  *
- * RTDB paths:
- *   • sensors/latest            — live sensor readings
- *   • sensors/history/{metric}  — persisted chart snapshots
+ * RTDB path: sensor
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -16,13 +14,13 @@
 export interface SensorTelemetry {
   /** Air temperature in °C */
   temperature: number;
-  /** Relative air humidity in % */
-  humidity: number;
   /** Soil moisture in % */
   moisture: number;
   /** Water reservoir level in % */
   waterLevel: number;
-  /** Unix epoch (ms) when the reading was taken */
+  /** Light intensity in lux */
+  light: number;
+  /** Unix epoch (ms) — generated client-side since RTDB has no timestamp */
   timestamp: number;
 }
 
@@ -57,7 +55,7 @@ export interface GraphSnapshot {
 }
 
 /** Union of all sensor metric keys — used for type-safe lookups. */
-export type SensorKey = "temperature" | "humidity" | "moisture" | "waterLevel";
+export type SensorKey = "temperature" | "moisture" | "waterLevel" | "light";
 
 /** Display metadata for each sensor metric. */
 export interface SensorMeta {
@@ -83,16 +81,6 @@ export const SENSOR_META: Record<SensorKey, SensorMeta> = {
     max: 60,
     optimalRange: [18, 30],
   },
-  humidity: {
-    label: "Air Humidity",
-    unit: "%",
-    icon: "Droplets",
-    color: "text-blue-500",
-    hexColor: "#3b82f6",
-    min: 0,
-    max: 100,
-    optimalRange: [40, 70],
-  },
   moisture: {
     label: "Soil Moisture",
     unit: "%",
@@ -113,6 +101,16 @@ export const SENSOR_META: Record<SensorKey, SensorMeta> = {
     max: 100,
     optimalRange: [20, 90],
   },
+  light: {
+    label: "Light",
+    unit: "lux",
+    icon: "Sun",
+    color: "text-yellow-500",
+    hexColor: "#eab308",
+    min: 0,
+    max: 10000,
+    optimalRange: [1000, 8000],
+  },
 };
 
 /** Connection status of the hardware node. */
@@ -130,7 +128,7 @@ export interface Recommendation {
 /** Rolling history buffer max size. */
 export const MAX_HISTORY_SIZE = 15;
 
-/** Maximum graph history records to retain in Firestore. */
+/** Maximum graph history records to retain in RTDB. */
 export const MAX_GRAPH_HISTORY = 100;
 
 /** Default stale threshold (ms) before a node is considered offline. */

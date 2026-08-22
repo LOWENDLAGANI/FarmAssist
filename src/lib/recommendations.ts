@@ -18,9 +18,9 @@ const THRESHOLDS = {
     high: 32,    // Above 32°C — heat stress
     critical: 38,
   },
-  humidity: {
-    low: 20,     // Below 20% — air too dry
-    high: 85,    // Above 85% — fungal disease risk
+  light: {
+    low: 500,    // Below 500 lux — too dark for most crops
+    high: 9000,  // Above 9000 lux — potential heat/light stress
   },
   moisture: {
     low: 30,     // Below 30% — needs irrigation
@@ -53,7 +53,7 @@ function makeRec(
  * Evaluates the latest telemetry snapshot against the threshold
  * rules and returns an array of actionable recommendations.
  *
- * @param data - The most recent sensor reading from Firestore
+ * @param data - The most recent sensor reading from RTDB
  * @returns    - Array of recommendations (may be empty if all readings are optimal)
  */
 export function generateRecommendations(
@@ -61,7 +61,7 @@ export function generateRecommendations(
 ): Recommendation[] {
   const recs: Recommendation[] = [];
   const t = data.temperature;
-  const h = data.humidity;
+  const l = data.light;
   const m = data.moisture;
   const w = data.waterLevel;
 
@@ -95,23 +95,23 @@ export function generateRecommendations(
     );
   }
 
-  // ── Humidity ─────────────────────────────────────────────────
-  if (h > THRESHOLDS.humidity.high) {
+  // ── Light ────────────────────────────────────────────────────
+  if (l > THRESHOLDS.light.high) {
     recs.push(
       makeRec(
-        "humidity",
+        "light",
         "warning",
-        `High air humidity (${h.toFixed(0)}%) — increased risk of fungal disease.`,
-        "Droplets"
+        `Very high light intensity (${l.toFixed(0)} lux) — risk of leaf scorch. Provide shade.`,
+        "Sun"
       )
     );
-  } else if (h < THRESHOLDS.humidity.low) {
+  } else if (l < THRESHOLDS.light.low) {
     recs.push(
       makeRec(
-        "humidity",
+        "light",
         "info",
-        `Low humidity (${h.toFixed(0)}%) — air is dry, consider misting.`,
-        "Wind"
+        `Low light level (${l.toFixed(0)} lux) — crops may need more sunlight.`,
+        "Sun"
       )
     );
   }

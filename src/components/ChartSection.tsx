@@ -63,7 +63,7 @@ export default function ChartSection({
   const hasData = chartData.length > 1;
 
   return (
-    <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-6">
+    <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-4 sm:p-6">
       {/* ── Chart header ── */}
       <div className="mb-4 flex items-center justify-between">
         <div>
@@ -87,7 +87,7 @@ export default function ChartSection({
 
       {/* ── Chart ── */}
       {hasData ? (
-        <div className="h-72">
+        <div className="h-56 sm:h-72">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={chartData}
@@ -166,7 +166,7 @@ export default function ChartSection({
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="flex h-72 items-center justify-center">
+        <div className="flex h-56 items-center justify-center sm:h-72">
           <div className="text-center">
             <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-slate-800/50" />
             <p className="text-sm text-slate-400">

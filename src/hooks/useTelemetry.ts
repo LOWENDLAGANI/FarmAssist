@@ -53,32 +53,14 @@ export interface TelemetryState {
  *  - "offline": no data received yet or node is missing
  */
 function computeStatus(
-  timestamp: number | null,
+  lastUpdateMs: number | null,
   staleThreshold: number
 ): ConnectionStatus {
-  if (!timestamp) return "offline";
-  const age = Date.now() - timestamp;
+  if (!lastUpdateMs) return "offline";
+  const age = Date.now() - lastUpdateMs;
   if (age <= staleThreshold) return "live";
   if (age <= staleThreshold * 3) return "stale";
   return "offline";
-}
-
-/**
- * Parses a timestamp value that may arrive as a string or number.
- * RTDB can store timestamps as strings (e.g. "543868").
- * If it looks like seconds (<= 10 digits, < year 2286 in ms),
- * we convert to ms. Otherwise treat as ms directly.
- */
-function parseTimestamp(raw: unknown): number | null {
-  if (typeof raw === "number") return raw;
-  if (typeof raw === "string") {
-    const num = Number(raw);
-    if (!Number.isNaN(num)) {
-      // If the value is small (< 10 billion), treat as seconds
-      return num < 10_000_000_000 ? num * 1000 : num;
-    }
-  }
-  return null;
 }
 
 export function useTelemetry(
@@ -91,9 +73,9 @@ export function useTelemetry(
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
-  // Keep a ref to the latest timestamp so the interval can read it
+  // Keep a ref to the last update time so the interval can read it
   // without re-subscribing to RTDB on every tick.
-  const latestTimestampRef = useRef<number | null>(null);
+  const lastUpdateRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
 
   // ── RTDB snapshot listener ────────────────────────────────────
@@ -120,39 +102,38 @@ export function useTelemetry(
             return;
           }
 
-          // Parse timestamp (may be string or number in RTDB)
-          const timestamp = parseTimestamp(data.timestamp);
-
           // Validate that essential fields are present
           if (
             typeof data.temperature !== "number" ||
-            typeof data.humidity !== "number" ||
             typeof data.moisture !== "number" ||
             typeof data.waterLevel !== "number" ||
-            timestamp === null
+            typeof data.light !== "number"
           ) {
             setError("Malformed telemetry document.");
             setIsLoading(false);
             return;
           }
 
+          // Generate timestamp client-side since RTDB doesn't store one
+          const now = Date.now();
+
           const telemetry: SensorTelemetry = {
             temperature: data.temperature,
-            humidity: data.humidity,
             moisture: data.moisture,
             waterLevel: data.waterLevel,
-            timestamp,
+            light: data.light,
+            timestamp: now,
           };
 
           setLatest(telemetry);
-          latestTimestampRef.current = timestamp;
-          setLastUpdated(Date.now());
+          lastUpdateRef.current = now;
+          setLastUpdated(now);
           setError(null);
           setIsLoading(false);
 
           // Append to rolling history buffer (max 15 entries)
           const newPoint: ChartDataPoint = {
-            timestamp,
+            timestamp: now,
             value: data.temperature, // default; the chart component picks the active sensor
           };
 
@@ -163,8 +144,8 @@ export function useTelemetry(
               : next;
           });
 
-          // Compute initial status
-          setStatus(computeStatus(timestamp, staleThreshold));
+          // Compute status based on when we received the data
+          setStatus(computeStatus(now, staleThreshold));
         },
         (err) => {
           // Gracefully handle RTDB permission errors and network issues
@@ -203,7 +184,7 @@ export function useTelemetry(
   useEffect(() => {
     const interval = setInterval(() => {
       setStatus(
-        computeStatus(latestTimestampRef.current, staleThreshold)
+        computeStatus(lastUpdateRef.current, staleThreshold)
       );
     }, 1_000);
 

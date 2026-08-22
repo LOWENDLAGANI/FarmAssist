@@ -5,9 +5,10 @@
  * to Firebase Realtime Database in real time.
  *
  * Hardware connections (adjust pins to your wiring):
- *   • DHT22 (Temperature + Humidity)  → GPIO 4
- *   • Soil Moisture Sensor (analog)   → GPIO 34
- *   • Water Level Sensor (analog)     → GPIO 35
+ *   • DHT22 (Temperature)         → GPIO 4
+ *   • Soil Moisture Sensor (analog)→ GPIO 34
+ *   • Water Level Sensor (analog)  → GPIO 35
+ *   • Light Sensor (analog)        → GPIO 36
  *
  * Required Arduino libraries (install via Library Manager):
  *   1. Firebase ESP Client    (by mobizt) — v2.x or later
@@ -20,7 +21,7 @@
  *   2. Set RTDB rules to allow authenticated writes:
  *      {
  *        "rules": {
- *          "sensors": {
+ *          "sensor": {
  *            ".read": "auth != null",
  *            ".write": "auth != null"
  *          }
@@ -28,8 +29,7 @@
  *      }
  *   3. Enable RTDB: Firebase Console → Realtime Database → Create database
  *
- * RTDB path written:
- *   sensors/latest
+ * RTDB path written: sensor
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -50,13 +50,12 @@
 #define API_KEY         "AIzaSyAuWDWRSVJU-73_lYoefIxiLq8HFyhfc7o"
 #define DATABASE_URL    "https://farmassist-2425-default-rtdb.asia-southeast1.firebasedatabase.app"
 
-// No auth credentials needed — using anonymous sign-in
-
 // Sensor pins (ESP32-S3)
 #define DHT_PIN         4
 #define DHT_TYPE        DHT22
 #define SOIL_MOISTURE_PIN   34
 #define WATER_LEVEL_PIN     35
+#define LIGHT_SENSOR_PIN    36
 
 // How often to send data (milliseconds)
 #define SEND_INTERVAL_MS    5000
@@ -68,6 +67,10 @@
 // Water level sensor calibration
 #define WATER_EMPTY     0       // Raw ADC when empty
 #define WATER_FULL      4095    // Raw ADC when full
+
+// Light sensor calibration
+#define LIGHT_DARK      0       // Raw ADC in complete darkness
+#define LIGHT_BRIGHT    4095    // Raw ADC in direct sunlight
 
 // NTP server for accurate timestamps
 #define NTP_SERVER      "pool.ntp.org"
@@ -124,7 +127,7 @@ void setup() {
   Firebase.reconnectWiFi(true);
   fbdo.setResponseSize(4096);
 
-  // Initialize Firebase (no auth yet — just config)
+  // Initialize Firebase
   Firebase.begin(&config, &auth);
   Serial.println("[OK] Firebase.begin() called");
 
@@ -157,7 +160,6 @@ void loop() {
 
     // ── Read sensors ──
     float temperature = dht.readTemperature();    // °C
-    float humidity    = dht.readHumidity();        // %
 
     // Read analog sensors and convert to percentages
     int soilRaw = analogRead(SOIL_MOISTURE_PIN);
@@ -168,21 +170,23 @@ void loop() {
     float waterLevel = map(waterRaw, WATER_EMPTY, WATER_FULL, 0, 100);
     waterLevel = constrain(waterLevel, 0.0f, 100.0f);
 
+    // Read light sensor — map to lux (0-10000 range)
+    int lightRaw = analogRead(LIGHT_SENSOR_PIN);
+    float light = map(lightRaw, LIGHT_DARK, LIGHT_BRIGHT, 0, 10000);
+    light = constrain(light, 0.0f, 10000.0f);
+
     // Check for DHT read errors
-    if (isnan(temperature) || isnan(humidity)) {
+    if (isnan(temperature)) {
       Serial.println("[WARN] DHT read failed, skipping cycle");
       return;
     }
 
-    // Get current timestamp in milliseconds
-    long timestamp = (long)time(nullptr) * 1000;
-
     // Log readings
-    Serial.printf("[Read] Temp: %.1f°C | Humidity: %.1f%% | Soil: %.1f%% | Water: %.1f%%\n",
-                  temperature, humidity, moisture, waterLevel);
+    Serial.printf("[Read] Temp: %.1f°C | Soil: %.1f%% | Water: %.1f%% | Light: %.0f lux\n",
+                  temperature, moisture, waterLevel, light);
 
     // ── Write to Realtime Database ──
-    pushToRTDB(temperature, humidity, moisture, waterLevel, timestamp);
+    pushToRTDB(temperature, moisture, waterLevel, light);
   }
 }
 
@@ -190,18 +194,17 @@ void loop() {
 // REALTIME DATABASE WRITE
 // ══════════════════════════════════════════════════════════════════
 
-void pushToRTDB(float temp, float hum, float moist, float water, long ts) {
-  // RTDB path: sensors/latest
-  // This overwrites the latest reading each time (upsert)
-  String path = "sensors/latest";
+void pushToRTDB(float temp, float moist, float water, float lightVal) {
+  // RTDB path: sensor
+  // This overwrites the sensor data each time (upsert)
+  String path = "sensor";
 
   // Build JSON payload
   FirebaseJson json;
   json.set("temperature", temp);
-  json.set("humidity", hum);
   json.set("moisture", moist);
   json.set("waterLevel", water);
-  json.set("timestamp", ts);
+  json.set("light", lightVal);
 
   // Write to RTDB
   if (Firebase.RTDB.setJSON(&fbdo, path.c_str(), &json)) {
