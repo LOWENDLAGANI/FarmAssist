@@ -13,10 +13,10 @@ import type { ConnectionStatus } from "@/types/telemetry";
 
 interface SettingsPageProps {
   status: ConnectionStatus;
-  lastUpdated: number | null;
+  lastUpdated?: number | null;
 }
 
-export default function SettingsPage({ status, lastUpdated }: SettingsPageProps) {
+export default function SettingsPage({ status }: SettingsPageProps) {
   const { theme, toggleTheme } = useAppTheme();
 
   return (

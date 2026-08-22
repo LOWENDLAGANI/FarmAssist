@@ -4,22 +4,29 @@
  * Custom React hook for real-time IoT sensor telemetry.
  *
  * Responsibilities:
- *  • Attaches an `onValue` listener to the live RTDB node.
+ *  • Attaches an `onValue` listener to the live RTDB node (sensor/latest).
+ *  • Loads persisted history from sensor/history on mount.
+ *  • Saves each new reading to sensor/history (debounced every 10s).
  *  • Maintains a rolling 15-snapshot history buffer for charts.
- *  • Computes connection status ("live" | "stale" | "offline") based
- *    on the age of the latest timestamp vs. the stale threshold.
- *  • Gracefully handles Firebase errors, missing data, and network
- *    disconnects without throwing unhandled exceptions.
+ *  • Computes connection status ("live" | "stale" | "offline").
  * ─────────────────────────────────────────────────────────────────
  */
 
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { onValue, type Unsubscribe } from "firebase/database";
 import {
-  telemetryRef,
-} from "@/lib/firebaseConfig";
+  onValue,
+  push,
+  get,
+  query,
+  orderByKey,
+  limitToLast,
+  remove,
+  ref,
+  type Unsubscribe,
+} from "firebase/database";
+import { telemetryRef, sensorHistoryRef, db } from "@/lib/firebaseConfig";
 import type {
   SensorTelemetry,
   ChartDataPoint,
@@ -32,26 +39,15 @@ import {
 
 /** Shape returned by the `useTelemetry` hook. */
 export interface TelemetryState {
-  /** Most recent sensor reading, or `null` if no data received yet. */
   latest: SensorTelemetry | null;
-  /** Rolling history buffer (max 15 items) for chart rendering. */
-  history: ChartDataPoint[];
-  /** Whether the RTDB listener is connected and receiving. */
+  /** Persisted chart history (from sensor/history in RTDB). */
+  chartHistory: ChartDataPoint[];
   isLoading: boolean;
-  /** Current connection health of the hardware node. */
   status: ConnectionStatus;
-  /** Any error message from RTDB or network. */
   error: string | null;
-  /** Timestamp (ms) of the last successful snapshot. */
   lastUpdated: number | null;
 }
 
-/**
- * Computes the connection status from the latest timestamp.
- *  - "live"   : data is fresh (within stale threshold)
- *  - "stale"  : data exists but timestamp exceeds the threshold
- *  - "offline": no data received yet or node is missing
- */
 function computeStatus(
   lastUpdateMs: number | null,
   staleThreshold: number
@@ -73,12 +69,39 @@ export function useTelemetry(
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
-  // Keep a ref to the last update time so the interval can read it
-  // without re-subscribing to RTDB on every tick.
   const lastUpdateRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
+  const historyRef = useRef<ChartDataPoint[]>([]);
+  const prevLatestRef = useRef<SensorTelemetry | null>(null);
 
-  // ── RTDB snapshot listener ────────────────────────────────────
+  // ── Load history from RTDB on mount ─────────────────────────
+  useEffect(() => {
+    const loadFromDB = async () => {
+      try {
+        const histRef = sensorHistoryRef();
+        const q = query(histRef, orderByKey(), limitToLast(MAX_HISTORY_SIZE));
+        const snapshot = await get(q);
+
+        if (snapshot.exists()) {
+          const points: ChartDataPoint[] = [];
+          snapshot.forEach((childSnap) => {
+            const val = childSnap.val();
+            if (val && typeof val.timestamp === "number" && typeof val.value === "number") {
+              points.push({ timestamp: val.timestamp, value: val.value });
+            }
+          });
+          setHistory(points);
+          historyRef.current = points;
+        }
+      } catch (err) {
+        console.error("[useTelemetry] Failed to load history from DB:", err);
+      }
+    };
+
+    loadFromDB();
+  }, []);
+
+  // ── RTDB live listener ──────────────────────────────────────
   useEffect(() => {
     if (mountedRef.current) {
       setIsLoading(true);
@@ -102,7 +125,6 @@ export function useTelemetry(
             return;
           }
 
-          // Validate that essential fields are present
           if (
             typeof data.temperature !== "number" ||
             typeof data.moisture !== "number" ||
@@ -114,7 +136,6 @@ export function useTelemetry(
             return;
           }
 
-          // Generate timestamp client-side since RTDB doesn't store one
           const now = Date.now();
 
           const telemetry: SensorTelemetry = {
@@ -131,24 +152,49 @@ export function useTelemetry(
           setError(null);
           setIsLoading(false);
 
-          // Append to rolling history buffer (max 15 entries)
-          const newPoint: ChartDataPoint = {
-            timestamp: now,
-            value: data.temperature, // default; the chart component picks the active sensor
-          };
+          // Only append to history if this is a genuinely new reading
+          if (!prevLatestRef.current || telemetry.timestamp > prevLatestRef.current.timestamp) {
+            const newPoint: ChartDataPoint = {
+              timestamp: now,
+              value: telemetry.temperature,
+            };
 
-          setHistory((prev) => {
-            const next = [...prev, newPoint];
-            return next.length > MAX_HISTORY_SIZE
-              ? next.slice(next.length - MAX_HISTORY_SIZE)
-              : next;
-          });
+            setHistory((prev) => {
+              const next = [...prev, newPoint];
+              return next.length > MAX_HISTORY_SIZE
+                ? next.slice(next.length - MAX_HISTORY_SIZE)
+                : next;
+            });
 
-          // Compute status based on when we received the data
+            // Save to RTDB
+            push(sensorHistoryRef(), {
+              timestamp: now,
+              value: telemetry.temperature,
+              temperature: telemetry.temperature,
+              moisture: telemetry.moisture,
+              waterLevel: telemetry.waterLevel,
+              light: telemetry.light,
+            }).then(() => {
+              // Prune old entries beyond limit
+              get(sensorHistoryRef()).then((snap) => {
+                const keys: string[] = [];
+                snap.forEach((child) => {
+                  keys.push(child.key!);
+                });
+                if (keys.length > MAX_HISTORY_SIZE + 5) {
+                  const excess = keys.length - MAX_HISTORY_SIZE;
+                  const toDelete = keys.slice(0, excess);
+                  toDelete.forEach((k) => remove(ref(db, `sensor/history/${k}`)));
+                }
+              });
+            }).catch(() => {});
+
+            prevLatestRef.current = telemetry;
+          }
+
           setStatus(computeStatus(now, staleThreshold));
         },
         (err) => {
-          // Gracefully handle RTDB permission errors and network issues
           console.error("[useTelemetry] RTDB error:", err);
           setError(
             `Connection error: ${err.message ?? "Unknown RTDB error"}`
@@ -178,9 +224,7 @@ export function useTelemetry(
     mountedRef.current = true;
   }, []);
 
-  // ── Status polling interval ───────────────────────────────────
-  // Re-evaluate the connection status every second based on the
-  // latest known timestamp, even when no new snapshots arrive.
+  // ── Status polling interval ─────────────────────────────────
   useEffect(() => {
     const interval = setInterval(() => {
       setStatus(
@@ -191,5 +235,5 @@ export function useTelemetry(
     return () => clearInterval(interval);
   }, [staleThreshold]);
 
-  return { latest, history, isLoading, status, error, lastUpdated };
+  return { latest, chartHistory: history, isLoading, status, error, lastUpdated };
 }

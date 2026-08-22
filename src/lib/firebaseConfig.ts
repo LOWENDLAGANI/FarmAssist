@@ -72,12 +72,12 @@ export function telemetryRef(): DatabaseReference {
 }
 
 /**
- * Reference to the history node for a specific sensor metric.
- * Path: sensor/history/{metricType}
+ * Reference to the flat history node.
+ * Path: sensor/history
+ * Each push stores one data point with all sensor values.
  */
-export function historyRef(metricType: string): DatabaseReference {
-  return ref(db, `sensor/history/${metricType}`);
-  // Note: history lives at sensor/history, sibling to sensor/latest
+export function sensorHistoryRef(): DatabaseReference {
+  return ref(db, "sensor/history");
 }
 
 /**

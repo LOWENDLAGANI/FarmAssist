@@ -37,7 +37,7 @@ export default function CircularGauge({
   decimals = 1,
   size = 180,
 }: CircularGaugeProps) {
-  const { arcPath, bgArcPath, percentage } = useMemo(() => {
+  const { arcPath, bgArcPath } = useMemo(() => {
     // Arc spans 270° (from 135° to 405°, i.e. 3/4 of a circle)
     const arcDegrees = 270;
     const startAngle = 135; // degrees
@@ -80,7 +80,7 @@ export default function CircularGauge({
         ? describeArc(cx, cy, radius, startAngle, fillEnd)
         : "";
 
-    return { arcPath: fPath, bgArcPath: bgPath, percentage: pct };
+    return { arcPath: fPath, bgArcPath: bgPath };
   }, [value, min, max, size]);
 
   // Format the display value

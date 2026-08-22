@@ -11,10 +11,10 @@
 
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useTelemetry } from "@/hooks/useTelemetry";
 import { useIsMobile } from "@/hooks/useMediaQuery";
-import type { SensorKey, SensorTelemetry, ChartDataPoint } from "@/types/telemetry";
+import type { SensorKey } from "@/types/telemetry";
 import { generateRecommendations } from "@/lib/recommendations";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
@@ -37,40 +37,16 @@ export default function Dashboard() {
   const [activePage, setActivePage] = useState("dashboard");
 
   // ── Real-time telemetry from Firebase ───────────────────────
-  const { latest, isLoading, status, error, lastUpdated } =
+  // chartHistory is persisted to sensor/history in RTDB and
+  // reloaded automatically on mount.
+  const { latest, chartHistory, isLoading, status, error, lastUpdated } =
     useTelemetry();
 
   // ── Active sensor selection ────────────────────────────────
   const [activeSensor, setActiveSensor] = useState<SensorKey>("temperature");
 
-  // ── Rolling history for chart — rebuilds when latest changes ──
-  const [chartHistory, setChartHistory] = useState<ChartDataPoint[]>([]);
-  const prevLatestRef = useRef<SensorTelemetry | null>(null);
-
-  // Append new readings to chart history when latest telemetry changes
-  useEffect(() => {
-    if (!latest || latest === prevLatestRef.current) return;
-
-    const newPoint: ChartDataPoint = {
-      timestamp: latest.timestamp,
-      value: latest[activeSensor],
-    };
-
-    setChartHistory((prev) => {
-      if (prev.length > 0 && prev[prev.length - 1]!.timestamp === newPoint.timestamp) {
-        return prev;
-      }
-      const next = [...prev, newPoint];
-      return next.length > 15 ? next.slice(next.length - 15) : next;
-    });
-
-    prevLatestRef.current = latest;
-  }, [latest, activeSensor]);
-
-  // Clear chart history when switching sensors
   const handleSelectSensor = useCallback((key: SensorKey) => {
     setActiveSensor(key);
-    setChartHistory([]);
   }, []);
 
   // ── Recommendations ──────────────────────────────────────

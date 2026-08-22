@@ -13,10 +13,10 @@ import type { ConnectionStatus } from "@/types/telemetry";
 
 interface TopBarProps {
   status: ConnectionStatus;
-  lastUpdated: number | null;
+  lastUpdated?: number | null;
 }
 
-export default function TopBar({ status, lastUpdated }: TopBarProps) {
+export default function TopBar({ status }: TopBarProps) {
   const isLive = status === "live";
   const isStale = status === "stale";
 
