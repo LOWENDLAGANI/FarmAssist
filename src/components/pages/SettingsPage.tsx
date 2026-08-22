@@ -91,8 +91,8 @@ export default function SettingsPage({ status, lastUpdated }: SettingsPageProps)
         <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
           <h3 className="mb-3 text-sm font-semibold text-white">About</h3>
           <div className="space-y-2 text-xs text-slate-400">
-            <p>FarmAssist IoT Dashboard v0.1.0</p>
-            <p>Real-time monitoring for smart farming</p>
+            <p>FarmAssist IoT Dashboard Powered by Minetallest v0.1.0</p>
+            <p>monitoring System</p>
             <p className="text-slate-500">Built with Next.js, Firebase, and Tailwind CSS</p>
           </div>
         </div>

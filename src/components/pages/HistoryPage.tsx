@@ -22,7 +22,7 @@ export default function HistoryPage({ history }: HistoryPageProps) {
     <div>
       <div className="mb-6">
         <h2 className="text-xl font-bold text-white">History</h2>
-        <p className="text-sm text-slate-400">Recent sensor readings from the last {history.length} updates</p>
+        <p className="text-sm text-slate-400">sensor daripada the last {history.length} updates</p>
       </div>
 
       {sorted.length > 0 ? (
