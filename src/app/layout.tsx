@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FarmAssist — IoT Dashboard",
+  title: "FarmAssist",
   description:
     "Real-time IoT dashboard for monitoring temperature, humidity, soil moisture, and water level sensors via Firebase.",
 };

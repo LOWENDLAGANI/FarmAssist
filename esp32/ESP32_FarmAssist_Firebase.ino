@@ -22,14 +22,14 @@
  *      {
  *        "rules": {
  *          "sensor": {
- *            ".read": "auth != null",
+ *            ".read": true,
  *            ".write": "auth != null"
  *          }
  *        }
  *      }
  *   3. Enable RTDB: Firebase Console → Realtime Database → Create database
  *
- * RTDB path written: sensor
+ * RTDB path written: sensor/latest
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -195,9 +195,9 @@ void loop() {
 // ══════════════════════════════════════════════════════════════════
 
 void pushToRTDB(float temp, float moist, float water, float lightVal) {
-  // RTDB path: sensor
-  // This overwrites the sensor data each time (upsert)
-  String path = "sensor";
+  // RTDB path: sensor/latest
+  // This overwrites the latest sensor data each time (upsert)
+  String path = "sensor/latest";
 
   // Build JSON payload
   FirebaseJson json;

@@ -22,6 +22,10 @@ import BottomNav from "./BottomNav";
 import SensorCard from "./SensorCard";
 import ChartSection from "./ChartSection";
 import RecommendationPanel from "./RecommendationPanel";
+import SensorsPage from "./pages/SensorsPage";
+import CameraPage from "./pages/CameraPage";
+import HistoryPage from "./pages/HistoryPage";
+import SettingsPage from "./pages/SettingsPage";
 
 /** Ordered list of sensor keys displayed in the card grid. */
 const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light"];
@@ -123,30 +127,52 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── Sensor cards grid ── */}
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 lg:grid-cols-4">
-            {SENSOR_KEYS.map((key) => (
-              <SensorCard
-                key={key}
-                sensorKey={key}
-                value={sensorValues[key]}
-                isSelected={activeSensor === key}
-                onSelect={handleSelectSensor}
-                compact={isMobile}
-              />
-            ))}
-          </div>
+          {/* ── Dashboard page ── */}
+          {activePage === "dashboard" && (
+            <>
+              <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 lg:grid-cols-4">
+                {SENSOR_KEYS.map((key) => (
+                  <SensorCard
+                    key={key}
+                    sensorKey={key}
+                    value={sensorValues[key]}
+                    isSelected={activeSensor === key}
+                    onSelect={handleSelectSensor}
+                    compact={isMobile}
+                  />
+                ))}
+              </div>
 
-          {/* ── Chart ── */}
-          <div className="mb-6 sm:mb-8">
-            <ChartSection
-              activeSensor={activeSensor}
-              history={chartHistory}
-            />
-          </div>
+              <div className="mb-6 sm:mb-8">
+                <ChartSection
+                  activeSensor={activeSensor}
+                  history={chartHistory}
+                />
+              </div>
 
-          {/* ── Recommendations ── */}
-          <RecommendationPanel recommendations={recommendations} />
+              <RecommendationPanel recommendations={recommendations} />
+            </>
+          )}
+
+          {/* ── Sensors page ── */}
+          {activePage === "sensors" && (
+            <SensorsPage latest={latest} />
+          )}
+
+          {/* ── Camera page ── */}
+          {activePage === "camera" && (
+            <CameraPage />
+          )}
+
+          {/* ── History page ── */}
+          {activePage === "history" && (
+            <HistoryPage history={chartHistory} />
+          )}
+
+          {/* ── Settings page ── */}
+          {activePage === "settings" && (
+            <SettingsPage status={status} lastUpdated={lastUpdated} />
+          )}
         </main>
 
         {/* ── Bottom Nav (mobile only) ── */}

@@ -17,7 +17,7 @@
  *    to avoid hardcoding credentials in source.
  *
  * Realtime Database paths used by this app:
- *   • sensor                   — live sensor data (ESP writes, dashboard reads)
+ *   • sensor/latest            — live sensor data (ESP writes, dashboard reads)
  *   • telemetry_logs           — telemetry log entries
  * ─────────────────────────────────────────────────────────────────
  */
@@ -64,11 +64,11 @@ export const DEVICE_ID =
 
 /**
  * Reference to the live telemetry node.
- * Path: sensor
+ * Path: sensor/latest
  * The ESP writes sensor readings to this node in real time.
  */
 export function telemetryRef(): DatabaseReference {
-  return ref(db, "sensor");
+  return ref(db, "sensor/latest");
 }
 
 /**
@@ -77,6 +77,7 @@ export function telemetryRef(): DatabaseReference {
  */
 export function historyRef(metricType: string): DatabaseReference {
   return ref(db, `sensor/history/${metricType}`);
+  // Note: history lives at sensor/history, sibling to sensor/latest
 }
 
 /**

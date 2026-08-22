@@ -24,7 +24,7 @@ export default function TopBar({ status, lastUpdated }: TopBarProps) {
     <header className="flex h-12 items-center justify-between border-b border-cyan-900/30 bg-[#0a1628] px-4 sm:h-14 sm:px-6">
       {/* ── Left: Title ── */}
       <h1 className="text-base font-semibold text-white sm:text-lg">
-        Farm Assistant
+        FarmAssist
       </h1>
 
       {/* ── Right: Status icons ── */}
