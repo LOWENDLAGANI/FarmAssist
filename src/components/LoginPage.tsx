@@ -89,7 +89,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="mt-6 text-center text-xs text-slate-600">
-          Powered by Firebase Authentication
+          Powered by Minetallest
         </p>
       </div>
     </div>
