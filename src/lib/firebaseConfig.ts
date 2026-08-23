@@ -19,6 +19,7 @@ import {
   type DatabaseReference,
 } from "firebase/database";
 import { getAuth, type Auth } from "firebase/auth";
+import { getMessaging, type Messaging } from "firebase/messaging";
 
 // ── Firebase configuration ────────────────────────────────────────
 const firebaseConfig = {
@@ -142,3 +143,45 @@ export function sessionRef(userId: string, sessionId: string, deviceId?: string)
 export function roverRegistryRef(deviceId: string): DatabaseReference {
   return ref(db, `rover_registry/${deviceId}`);
 }
+
+// ── Notifications ────────────────────────────────────────────
+
+/**
+ * Reference to the notifications node for a user.
+ * Path: users/{uid}/notifications
+ *
+ * Shape of each child: {
+ *   id: string,
+ *   type: "sensor_alert" | "force_pair" | "rover_offline",
+ *   title: string,
+ *   body: string,
+ *   deviceId: string,
+ *   createdAt: number,
+ *   read: boolean
+ * }
+ */
+export function notificationsRef(userId: string): DatabaseReference {
+  return ref(db, `users/${userId}/notifications`);
+}
+
+/**
+ * Reference to the FCM token stored for a user.
+ * Path: users/{uid}/fcmToken
+ */
+export function fcmTokenRef(userId: string): DatabaseReference {
+  return ref(db, `users/${userId}/fcmToken`);
+}
+
+/**
+ * Firebase Cloud Messaging instance (browser only).
+ * Returns null on the server or if messaging is unsupported.
+ */
+let _messaging: Messaging | null = null;
+try {
+  if (typeof window !== "undefined") {
+    _messaging = getMessaging(app);
+  }
+} catch {
+  // Messaging not available (SSR or unsupported browser)
+}
+export const messaging: Messaging | null = _messaging;

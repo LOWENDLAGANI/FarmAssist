@@ -24,7 +24,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { onValue, set, type Unsubscribe } from "firebase/database";
+import { onValue, set, get, type Unsubscribe } from "firebase/database";
 import { roverRegistryRef } from "@/lib/firebaseConfig";
 
 export type DeviceLinkStatus =
@@ -145,12 +145,7 @@ export function useDeviceValidation(
     async (uid: string, did: string): Promise<boolean> => {
       if (!uid || !did) return false;
       try {
-        const snap = await new Promise<import("firebase/database").DataSnapshot>((resolve, reject) => {
-          const { get } = require("firebase/database");
-          get(roverRegistryRef(did))
-            .then(resolve)
-            .catch(reject);
-        });
+        const snap = await get(roverRegistryRef(did));
         const existing = snap.val();
 
         // Block if already paired to a different user

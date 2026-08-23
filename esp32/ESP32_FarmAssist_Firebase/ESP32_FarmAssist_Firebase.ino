@@ -4,6 +4,7 @@
 #include <time.h>
 #include <Preferences.h>
 #include <WebServer.h>
+#include <Adafruit_NeoPixel.h>
 
 #include "addons/TokenHelper.h"
 #include "addons/RTDBHelper.h"
@@ -27,8 +28,12 @@
 #define WEB_AUTH_USER "admin"
 #define WEB_AUTH_PASS "admin123"
 
+#define LED_PIN 48
+#define LED_COUNT 1
+
 Preferences prefs;
 WebServer server(80);
+Adafruit_NeoPixel statusLed(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 String cfgSsid;
 String cfgPass;
@@ -58,9 +63,13 @@ unsigned long lastWifiCheck = 0;
 unsigned long sampleCount = 0;
 unsigned long historyCount = 0;
 bool signUpOk = false;
-bool isOwner = true;            // false when rover_registry says another UID owns this device
+bool isOwner = true;
 unsigned long lastOwnershipCheck = 0;
-#define OWNERSHIP_CHECK_INTERVAL_MS 30000  // re-check registry every 30s
+#define OWNERSHIP_CHECK_INTERVAL_MS 30000
+
+unsigned long ledLastUpdate = 0;
+bool ledBlinkState = false;
+uint16_t ledHue = 0;
 
 #define USE_PLACEHOLDER_DATA true
 
@@ -190,22 +199,15 @@ void setupWebServer() {
   server.begin();
 }
 
-// ── Ownership guard ──────────────────────────────────────────
-// Reads rover_registry/{deviceId} and sets isOwner flag.
-//  • Record absent or paired=false  → isOwner=true  (free to write)
-//  • paired=true, ownerUid==me     → isOwner=true  (I am the owner)
-//  • paired=true, ownerUid!=me     → isOwner=false (locked out)
 void checkOwnership() {
   if (!Firebase.ready() || !signUpOk) return;
 
   FirebaseData snap;
   if (!Firebase.RTDB.getJSON(&snap, REGISTRY_PATH.c_str())) {
-    // Can't read — assume OK to write (fail open on network errors)
     return;
   }
 
   if (!snap.dataAvailable()) {
-    // No record at all — Rover is unregistered, first-time setup
     isOwner = true;
     return;
   }
@@ -221,13 +223,10 @@ void checkOwnership() {
   bool paired = pairedData.boolValue;
 
   if (!paired || ownerUid.length() == 0) {
-    // Rover was unlinked — available for pairing
     isOwner = true;
   } else if (ownerUid == cfgUserUid) {
-    // I am the registered owner
     isOwner = true;
   } else {
-    // Another account owns this Rover
     isOwner = false;
   }
 
@@ -283,6 +282,35 @@ bool syncTime() {
   return true;
 }
 
+void updateStatusLed() {
+  bool wifiConnected = (WiFi.status() == WL_CONNECTED);
+  bool fullyReady = wifiConnected && Firebase.ready() && signUpOk && isOwner && sampleCount > 0;
+
+  if (!wifiConnected) {
+    if (millis() - ledLastUpdate > 300) {
+      ledLastUpdate = millis();
+      ledBlinkState = !ledBlinkState;
+      statusLed.setPixelColor(0, ledBlinkState ? statusLed.Color(255, 0, 0) : statusLed.Color(0, 0, 0));
+      statusLed.show();
+    }
+  } else if (!fullyReady) {
+    if (millis() - ledLastUpdate > 300) {
+      ledLastUpdate = millis();
+      ledBlinkState = !ledBlinkState;
+      statusLed.setPixelColor(0, ledBlinkState ? statusLed.Color(255, 255, 255) : statusLed.Color(0, 0, 0));
+      statusLed.show();
+    }
+  } else {
+    if (millis() - ledLastUpdate > 20) {
+      ledLastUpdate = millis();
+      ledHue += 150;
+      uint32_t rgbColor = statusLed.gamma32(statusLed.ColorHSV(ledHue));
+      statusLed.setPixelColor(0, rgbColor);
+      statusLed.show();
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -295,6 +323,10 @@ void setup() {
   Serial.println("  Device ID : " + cfgDeviceId);
   Serial.println("  Data path : " + LATEST_PATH);
   Serial.println("===============================================");
+
+  statusLed.begin();
+  statusLed.setBrightness(60);
+  statusLed.show();
 
   dht.begin();
 
@@ -310,6 +342,7 @@ void setup() {
   int wifiAttempts = 0;
   while (WiFi.status() != WL_CONNECTED && wifiAttempts < 40) {
     Serial.print(".");
+    updateStatusLed();
     delay(300);
     wifiAttempts++;
   }
@@ -342,10 +375,8 @@ void setup() {
 
   randomSeed(analogRead(0));
 
-  // Check ownership before first write
   checkOwnership();
 
-  // Write initial lastSeen + firmwareVersion to registry on boot
   updateLastSeen();
   if (Firebase.ready() && signUpOk) {
     FirebaseJson fwJson;
@@ -432,7 +463,6 @@ void sampleSensors() {
       }
     }
 
-    // Always update lastSeen so the web app knows the Rover is physically online
     updateLastSeen();
   } else {
     Serial.println(nowPrefix() + "[Latest] SKIPPED - Firebase not ready/signed in");
@@ -507,10 +537,10 @@ void saveHistoryToFirebase() {
 
 void loop() {
   server.handleClient();
+  updateStatusLed();
 
   unsigned long now = millis();
 
-  // Periodic ownership check
   if (now - lastOwnershipCheck > OWNERSHIP_CHECK_INTERVAL_MS || lastOwnershipCheck == 0) {
     lastOwnershipCheck = now;
     checkOwnership();
@@ -520,6 +550,7 @@ void loop() {
     lastWifiCheck = now;
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println(nowPrefix() + "[WiFi] WARNING: disconnected, attempting reconnect...");
+      WiFi.reconnect();
     }
   }
 

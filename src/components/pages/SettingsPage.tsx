@@ -25,13 +25,17 @@ import {
   Unlink,
   AlertTriangle,
   X,
+  Bell,
 } from "lucide-react";
 import { useAppTheme } from "../ThemeProvider";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
 import RoverOverviewCard from "../RoverOverviewCard";
+import { formatLastSeen } from "@/lib/formatLastSeen";
 import type { ConnectionStatus, SensorKey } from "@/types/telemetry";
 import { SENSOR_META } from "@/types/telemetry";
 import type { SensorRanges } from "@/hooks/useSensorRanges";
+
+import type { NotificationType } from "@/types/notifications";
 
 interface SettingsPageProps {
   status: ConnectionStatus;
@@ -42,6 +46,13 @@ interface SettingsPageProps {
   onRangesSave: (ranges: SensorRanges) => void;
   onRangesReset: () => void;
   userUID: string;
+  onCreateNotification: (
+    userId: string,
+    type: NotificationType,
+    title: string,
+    body: string,
+    deviceId: string
+  ) => Promise<void>;
 }
 
 const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light"];
@@ -54,22 +65,6 @@ function getRangeStep(sensor: SensorKey): number {
 
 function getRangePercent(value: number, min: number, max: number): number {
   return ((value - min) / (max - min)) * 100;
-}
-
-/** Format a lastSeen timestamp into a human-readable relative string. */
-function formatLastSeen(lastSeenMs: number): string {
-  const now = Date.now();
-  const diffMs = now - lastSeenMs;
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
-
-  if (diffSec < 30) return "just now";
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m ago`;
-  return `${diffDay}d ${diffHr % 24}h ago`;
 }
 
 interface VisualRangeSelectorProps {
@@ -254,6 +249,7 @@ export default function SettingsPage({
   onRangesSave,
   onRangesReset,
   userUID,
+  onCreateNotification,
 }: SettingsPageProps) {
   const { theme, toggleTheme } = useAppTheme();
   const { registerDevice, forceRegisterDevice, unlinkDevice, status: deviceLinkStatus, registryInfo } = useDeviceValidation(userUID, deviceId);
@@ -357,6 +353,24 @@ export default function SettingsPage({
       setTimeout(() => setUidCopied(false), 2000);
     } catch {
       // Fallback: select text
+    }
+  };
+
+  const handleTestNotification = async () => {
+    // Write to notification center
+    await onCreateNotification(
+      userUID,
+      "sensor_alert",
+      "Test Notification",
+      `This is a test notification for Rover "${deviceId}". If you see this, notifications are working!`,
+      deviceId
+    );
+    // Also fire a browser notification if permission granted
+    if (Notification.permission === "granted") {
+      new Notification("FarmAssist Test", {
+        body: `Notifications are working for Rover "${deviceId}"!`,
+        icon: "/favicon.ico",
+      });
     }
   };
 
@@ -778,6 +792,26 @@ export default function SettingsPage({
             </div>
             <RefreshCw className="h-4 w-4 text-slate-500" />
           </button>
+        </div>
+
+        {/* Notifications */}
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+          <h3 className="mb-3 text-sm font-semibold text-white">
+            Notifications
+          </h3>
+          <p className="mb-3 text-xs text-slate-400">
+            Test that push notifications and the notification center are working correctly.
+          </p>
+          <button
+            onClick={handleTestNotification}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-colors hover:bg-cyan-500/30"
+          >
+            <Bell className="h-4 w-4" />
+            Send Test Notification
+          </button>
+          <p className="mt-2 text-center text-[10px] text-slate-500">
+            A browser notification and an in-app notification will be sent.
+          </p>
         </div>
 
         {/* Connection Info */}

@@ -20,6 +20,9 @@ import { useDeviceId } from "@/hooks/useDeviceId";
 import { useSensorRanges } from "@/hooks/useSensorRanges";
 import { useLoggingSession } from "@/hooks/useLoggingSession";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useCriticalAlerts } from "@/hooks/useCriticalAlerts";
+import { useFCM } from "@/hooks/useFCM";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { SensorKey } from "@/types/telemetry";
 import { generateRecommendations } from "@/lib/recommendations";
@@ -103,6 +106,35 @@ export default function Dashboard() {
     resetToDefaults: resetRanges,
   } = useSensorRanges(userId, deviceId);
 
+  // ── Notifications & push ──────────────────────────────────
+  const {
+    notifications,
+    unreadCount,
+    createNotification,
+    markRead,
+    markAllRead,
+  } = useNotifications(userId);
+
+  const { requestPermission } = useFCM(userId);
+
+  // Detect critical events and write notifications
+  useCriticalAlerts({
+    userId,
+    deviceId,
+    latest,
+    ranges,
+    status,
+    createNotification,
+  });
+
+  // ── Auto-request FCM permission on mount ───────────────────
+  const fcmRequestedRef = useRef(false);
+  useEffect(() => {
+    if (!userId || fcmRequestedRef.current) return;
+    fcmRequestedRef.current = true;
+    requestPermission(userId);
+  }, [userId, requestPermission]);
+
   // ── Error dialog state ─────────────────────────────────────
   const [showError, setShowError] = useState(false);
 
@@ -144,7 +176,15 @@ export default function Dashboard() {
       {/* ── Main content area ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* ── Top Bar ── */}
-        <TopBar status={status} lastUpdated={lastUpdated} deviceId={deviceId} />
+        <TopBar
+          status={status}
+          lastUpdated={lastUpdated}
+          deviceId={deviceId}
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onMarkRead={(id) => markRead(userId, id)}
+          onMarkAllRead={() => markAllRead(userId)}
+        />
 
         {/* ── Scrollable content ── */}
         <main className="relative flex-1 overflow-y-auto p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-6">
@@ -260,6 +300,7 @@ export default function Dashboard() {
               onRangesSave={updateRanges}
               onRangesReset={resetRanges}
               userUID={userId}
+              onCreateNotification={createNotification}
             />
           )}
         </main>

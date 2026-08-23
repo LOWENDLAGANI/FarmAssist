@@ -1,0 +1,21 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "notifications": {
+          "$notifId": {
+            ".validate": "newData.hasChildren(['type', 'title', 'body', 'deviceId', 'createdAt', 'read'])"
+          }
+        }
+      }
+    },
+    "rover_registry": {
+      "$deviceId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
