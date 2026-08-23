@@ -48,21 +48,20 @@ const unsigned long WIFI_CHECK_INTERVAL_MS = 15000; // 15 seconds - WiFi watchdo
 unsigned long sampleprevMillis = 0;
 unsigned long historyPrevMillis = 0;
 unsigned long lastWifiCheck = 0;
-unsigned long sampleCount = 0;   // total samples taken since boot
-unsigned long historyCount = 0;  // total history writes since boot
+unsigned long sampleCount = 0;   
+unsigned long historyCount = 0;  
 bool signUpOk = false;
 
-// ---------------- PLACEHOLDER MODE ----------------
+
 #define USE_PLACEHOLDER_DATA true
 
-// ---------------- Soil Moisture Sensor ----------------
 int soilPin = 32;
 int soilVal;
 int moistureVal;
 const int drySoil = 3000;
 const int wetSoil = 1000;
 
-// ---------------- DHT Temperature Sensor ----------------
+
 #define DHTPIN 4
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
