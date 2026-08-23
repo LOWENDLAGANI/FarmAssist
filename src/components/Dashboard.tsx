@@ -61,7 +61,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (deviceValidationLoading) return;
     if (hasRedirectedRef.current) return;
-    if (deviceLinkStatus === "mismatch" || deviceLinkStatus === "unregistered") {
+    if (deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered") {
       hasRedirectedRef.current = true;
       setActivePage("settings");
     }

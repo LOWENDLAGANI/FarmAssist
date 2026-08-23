@@ -128,15 +128,17 @@ export function sessionRef(userId: string, sessionId: string, deviceId?: string)
   return ref(db, `users/${userId}/devices/${id}/sessions/${sessionId}`);
 }
 
-// ── Device Link Registry ───────────────────────────────────────
+// ── Rover Ownership Registry ─────────────────────────────────
 
 /**
- * Reference to the device link record for a user's device.
- * Path: users/{uid}/devices/{deviceId}/link
+ * Reference to the global ownership record for a Rover.
+ * Path: rover_registry/{deviceId}
  *
- * This record is written when a user pairs a Rover in Settings.
- * Its existence confirms that the current user has paired this device.
+ * This record is shared across all users (auth != null can read/write).
+ * It stores who currently owns the Rover and whether it is paired.
+ *
+ * Shape: { ownerUid: string, paired: boolean, pairedAt: number }
  */
-export function deviceLinkRef(userId: string, deviceId: string): DatabaseReference {
-  return ref(db, `users/${userId}/devices/${deviceId}/link`);
+export function roverRegistryRef(deviceId: string): DatabaseReference {
+  return ref(db, `rover_registry/${deviceId}`);
 }

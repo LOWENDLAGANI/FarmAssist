@@ -1,59 +1,68 @@
 /**
  * useDeviceValidation.ts
  * ─────────────────────────────────────────────────────────────────
- * Custom hook for validating that a Rover (ESP32) is properly linked
- * to the currently logged-in user's account.
+ * Custom hook for validating exclusive Rover (ESP32) ownership.
  *
- * How it works:
- *  1. When a user pairs a Rover in Settings, a record is written to
- *     `users/{uid}/devices/{deviceId}/link` with a timestamp.
- *  2. This hook listens to both the link record AND the live telemetry
- *     node in real-time.
- *  3. If the link record exists for this user → "linked"
- *  4. If no link record exists AND no telemetry data is present at
- *     the user's path → "mismatch" (device is writing to another
- *     account's path)
- *  5. If no link record exists but telemetry is present (e.g. ESP32
- *     writes without web pairing) → "unregistered"
+ * Uses a shared `rover_registry/{deviceId}` node that every
+ * authenticated user can read, but only the current owner (or
+ * a first-time pairer) can write to. This prevents two accounts
+ * from pairing the same Rover simultaneously.
+ *
+ * Flow:
+ *  1. On mount, listen to `rover_registry/{deviceId}`.
+ *  2. If `paired === true && ownerUid === me` → "linked"
+ *  3. If `paired === true && ownerUid !== me` → "taken"
+ *  4. If record absent or `paired === false` → "unregistered"
+ *  5. Pairing writes `{ ownerUid, paired: true, pairedAt }` —
+ *     only succeeds if the Rover is unregistered or already mine.
+ *  6. Force-pairing overwrites the record to claim a taken Rover.
+ *  7. Unlinking sets `paired: false` but keeps the record so the
+ *     original owner can re-pair without conflict.
  * ─────────────────────────────────────────────────────────────────
  */
 
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { onValue, set, remove, type Unsubscribe } from "firebase/database";
-import { deviceLinkRef, telemetryRef } from "@/lib/firebaseConfig";
+import { onValue, set, type Unsubscribe } from "firebase/database";
+import { roverRegistryRef } from "@/lib/firebaseConfig";
 
 export type DeviceLinkStatus =
-  /** Device is registered and linked to this user. */
+  /** Rover is paired to this user's account. */
   | "linked"
-  /** Device is writing data to a different account's path. */
-  | "mismatch"
-  /** No link record found; telemetry may or may not be present. */
+  /** Rover is paired to a *different* account. */
+  | "taken"
+  /** Rover is unpaired / record doesn't exist. */
   | "unregistered"
   /** Still loading from RTDB. */
   | "loading";
 
-export interface DeviceLinkInfo {
-  /** Unix timestamp (ms) when the device was paired. */
+export interface RoverRegistryInfo {
+  /** The UID that currently owns this Rover. */
+  ownerUid: string;
+  /** Whether the Rover is actively paired. */
+  paired: boolean;
+  /** Unix timestamp (ms) when the Rover was paired. */
   pairedAt: number;
 }
 
 export interface DeviceValidationResult {
-  /** Current linkage status. */
+  /** Current ownership status. */
   status: DeviceLinkStatus;
-  /** Metadata about the device link record, if it exists. */
-  linkInfo: DeviceLinkInfo | null;
+  /** Full registry record, if it exists. */
+  registryInfo: RoverRegistryInfo | null;
   /** Whether the initial RTDB reads have completed. */
   isLoading: boolean;
-  /** Write the current user as the owner of this device. */
-  registerDevice: (userId: string, deviceId: string) => Promise<void>;
-  /** Remove the link record so a different account can pair this device. */
+  /** Pair this Rover to the given user. Fails if already taken by another. */
+  registerDevice: (userId: string, deviceId: string) => Promise<boolean>;
+  /** Force-pair a Rover already owned by another user. */
+  forceRegisterDevice: (userId: string, deviceId: string) => Promise<void>;
+  /** Unlink the Rover so it can be paired by any account. */
   unlinkDevice: (userId: string, deviceId: string) => Promise<void>;
 }
 
 /**
- * Validates whether `deviceId` is linked to `userId`.
+ * Validates whether `deviceId` is exclusively paired to `userId`.
  *
  * @param userId   The currently logged-in Firebase Auth UID.
  * @param deviceId The Rover ID entered in the dashboard.
@@ -63,10 +72,10 @@ export function useDeviceValidation(
   deviceId: string
 ): DeviceValidationResult {
   const [status, setStatus] = useState<DeviceLinkStatus>("loading");
-  const [linkInfo, setLinkInfo] = useState<DeviceLinkInfo | null>(null);
+  const [registryInfo, setRegistryInfo] = useState<RoverRegistryInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ── Track both link record and telemetry presence ────────────
+  // ── Listen to rover_registry/{deviceId} ─────────────────────
   useEffect(() => {
     if (!userId || !deviceId) {
       setStatus("loading");
@@ -75,102 +84,115 @@ export function useDeviceValidation(
     }
 
     setIsLoading(true);
-    let linkExists = false;
-    let telemetryExists = false;
-    let linkLoaded = false;
-    let telemetryLoaded = false;
-
-    const resolveStatus = () => {
-      if (!linkLoaded || !telemetryLoaded) return;
-      setIsLoading(false);
-
-      if (linkExists) {
-        setStatus("linked");
-      } else if (!telemetryExists) {
-        // No link record AND no telemetry at this user's path —
-        // the ESP32 is almost certainly writing to another account.
-        setStatus("mismatch");
-      } else {
-        // Telemetry exists but user never paired through the web app.
-        setStatus("unregistered");
-      }
-    };
-
-    let unsubscribeLink: Unsubscribe;
-    let unsubscribeTelemetry: Unsubscribe;
+    let unsubscribe: Unsubscribe;
 
     try {
-      // ── Listen to link record ──────────────────────────────
-      unsubscribeLink = onValue(
-        deviceLinkRef(userId, deviceId),
+      unsubscribe = onValue(
+        roverRegistryRef(deviceId),
         (snapshot) => {
           const data = snapshot.val();
-          if (data && data.pairedAt) {
-            linkExists = true;
-            setLinkInfo({ pairedAt: data.pairedAt });
-          } else {
-            linkExists = false;
-            setLinkInfo(null);
-          }
-          linkLoaded = true;
-          resolveStatus();
-        },
-        (err) => {
-          console.error("[useDeviceValidation] Link read error:", err);
-          linkExists = false;
-          linkLoaded = true;
-          resolveStatus();
-        }
-      );
 
-      // ── Listen to telemetry node (read-only check) ─────────
-      unsubscribeTelemetry = onValue(
-        telemetryRef(userId, deviceId),
-        (snapshot) => {
-          telemetryExists = snapshot.exists();
-          telemetryLoaded = true;
-          resolveStatus();
+          if (!data) {
+            setStatus("unregistered");
+            setRegistryInfo(null);
+            setIsLoading(false);
+            return;
+          }
+
+          const info: RoverRegistryInfo = {
+            ownerUid: data.ownerUid ?? "",
+            paired: data.paired === true,
+            pairedAt: data.pairedAt ?? 0,
+          };
+          setRegistryInfo(info);
+
+          if (info.paired && info.ownerUid === userId) {
+            setStatus("linked");
+          } else if (info.paired && info.ownerUid !== userId) {
+            setStatus("taken");
+          } else {
+            setStatus("unregistered");
+          }
+
+          setIsLoading(false);
         },
         (err) => {
-          console.error("[useDeviceValidation] Telemetry read error:", err);
-          telemetryExists = false;
-          telemetryLoaded = true;
-          resolveStatus();
+          console.error("[useDeviceValidation] Registry read error:", err);
+          setStatus("unregistered");
+          setRegistryInfo(null);
+          setIsLoading(false);
         }
       );
     } catch (err) {
-      console.error("[useDeviceValidation] Failed to attach listeners:", err);
+      console.error("[useDeviceValidation] Failed to attach listener:", err);
       setStatus("unregistered");
       setIsLoading(false);
     }
 
     return () => {
-      unsubscribeLink?.();
-      unsubscribeTelemetry?.();
+      unsubscribe?.();
     };
   }, [userId, deviceId]);
 
-  // ── Register this user as the device owner ───────────────────
+  // ── Pair (only if unregistered or already mine) ─────────────
   const registerDevice = useCallback(
-    async (uid: string, did: string) => {
-      if (!uid || !did) return;
+    async (uid: string, did: string): Promise<boolean> => {
+      if (!uid || !did) return false;
       try {
-        await set(deviceLinkRef(uid, did), {
+        const snap = await new Promise<import("firebase/database").DataSnapshot>((resolve, reject) => {
+          const { get } = require("firebase/database");
+          get(roverRegistryRef(did))
+            .then(resolve)
+            .catch(reject);
+        });
+        const existing = snap.val();
+
+        // Block if already paired to a different user
+        if (existing?.paired && existing.ownerUid !== uid) {
+          return false;
+        }
+
+        await set(roverRegistryRef(did), {
+          ownerUid: uid,
+          paired: true,
           pairedAt: Date.now(),
         });
+        return true;
       } catch (err) {
         console.error("[useDeviceValidation] Failed to register device:", err);
+        return false;
       }
     },
     []
   );
 
-  // ── Unlink this device (remove the link record) ──────────────
+  // ── Force-pair (overwrite another user's ownership) ─────────
+  const forceRegisterDevice = useCallback(
+    async (uid: string, did: string) => {
+      if (!uid || !did) return;
+      try {
+        await set(roverRegistryRef(did), {
+          ownerUid: uid,
+          paired: true,
+          pairedAt: Date.now(),
+        });
+      } catch (err) {
+        console.error("[useDeviceValidation] Failed to force-register device:", err);
+      }
+    },
+    []
+  );
+
+  // ── Unlink (set paired=false, keep record) ──────────────────
   const unlinkDevice = useCallback(
     async (uid: string, did: string) => {
       if (!uid || !did) return;
       try {
-        await remove(deviceLinkRef(uid, did));
+        await set(roverRegistryRef(did), {
+          ownerUid: uid,
+          paired: false,
+          pairedAt: 0,
+        });
       } catch (err) {
         console.error("[useDeviceValidation] Failed to unlink device:", err);
       }
@@ -180,9 +202,10 @@ export function useDeviceValidation(
 
   return {
     status,
-    linkInfo,
+    registryInfo,
     isLoading,
     registerDevice,
+    forceRegisterDevice,
     unlinkDevice,
   };
 }
