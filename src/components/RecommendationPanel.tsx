@@ -85,10 +85,10 @@ export default function RecommendationPanel({
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-white">
-            AI Recommendations
+            AI Overview
           </h2>
           <p className="text-sm text-slate-400">
-            Real-time analysis of your sensor data
+            Real-time analysis
           </p>
         </div>
         <div className="flex gap-2">
@@ -136,10 +136,10 @@ export default function RecommendationPanel({
         <div className="flex flex-col items-center justify-center py-8">
           <CheckCircle className="mb-2 h-10 w-10 text-emerald-500" />
           <p className="text-sm font-medium text-slate-300">
-            All systems nominal
+            All systems normal
           </p>
           <p className="text-xs text-slate-500">
-            No alerts — your farm is looking great!
+            No alerts- Nice!!
           </p>
         </div>
       )}

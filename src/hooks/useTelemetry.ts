@@ -143,7 +143,7 @@ export function useTelemetry(
             setLatest(null);
             setStatus("offline");
             setIsLoading(false);
-            setError("No telemetry data found for this device.");
+            setError("No data found.");
             return;
           }
 

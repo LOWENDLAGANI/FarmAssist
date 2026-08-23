@@ -1,57 +1,61 @@
 #include <WiFi.h>
-#include <Firebase_ESP_Client.h>  // Official Firebase ESP Client library
-#include <DHT.h>                 // Adafruit DHT sensor library (install "DHT sensor library" + "Adafruit Unified Sensor" via Library Manager)
-#include <time.h>                // For NTP time sync
+#include <Firebase_ESP_Client.h>
+#include <DHT.h>
+#include <time.h>
+#include <Preferences.h>
+#include <WebServer.h>
 
-// Helper functions for token generation and debug info
 #include "addons/TokenHelper.h"
 #include "addons/RTDBHelper.h"
 
-// Wi-Fi credentials
-#define WIFI_SSID "Minetallest's POCO X7"
-#define WIFI_PASSWORD "TESTER123"
-
-// Firebase project credentials
 #define API_KEY "AIzaSyAlLaKUR4q8CZTMFlAFRTM-ToncomN4Ugs"
 #define DATABASE_URL "https://farmassist-2425-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
-// ---------------- User & Device Identity ----------------
-// USER_UID must match the Firebase Auth UID shown on the dashboard's
-// Settings page — copy it there before flashing, or the ESP32 will be
-// writing to a path the dashboard never reads from.
-#define USER_UID "tsYo3zKfr8SSowOE23lPQe8Kb0v2"
+#define DEFAULT_WIFI_SSID "Minetallest's POCO X7"
+#define DEFAULT_WIFI_PASSWORD "TESTER123"
+#define DEFAULT_USER_UID "tsYo3zKfr8SSowOE23lPQe8Kb0v2"
+#define DEFAULT_DEVICE_ID "esp32-farm-001"
 
-// DEVICE_ID lets you run multiple sensor units under the same user account.
-#define DEVICE_ID "esp32-farm-001"
+#define DEFAULT_SAMPLE_INTERVAL_MS 5000
+#define DEFAULT_HISTORY_INTERVAL_MS 60000
+#define DEFAULT_WIFI_CHECK_INTERVAL_MS 15000
 
-// Firebase database paths, built from USER_UID + DEVICE_ID
-String LATEST_PATH  = "/users/" + String(USER_UID) + "/devices/" + String(DEVICE_ID) + "/latest";
-String HISTORY_BASE = "/users/" + String(USER_UID) + "/devices/" + String(DEVICE_ID) + "/history";
+#define AP_SSID "FarmAssist-Setup"
+#define AP_PASSWORD "setup1234"
 
-// Firebase objects
+#define WEB_AUTH_USER "admin"
+#define WEB_AUTH_PASS "admin123"
+
+Preferences prefs;
+WebServer server(80);
+
+String cfgSsid;
+String cfgPass;
+String cfgUserUid;
+String cfgDeviceId;
+unsigned long cfgSampleInterval;
+unsigned long cfgHistoryInterval;
+unsigned long cfgWifiCheckInterval;
+
+String LATEST_PATH;
+String HISTORY_BASE;
+
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
-// ---------------- NTP Time Sync ----------------
-const long  gmtOffset_sec = 8 * 3600;   // Malaysia = UTC+8
-const int   daylightOffset_sec = 0;
+const long gmtOffset_sec = 8 * 3600;
+const int daylightOffset_sec = 0;
 const char* ntpServer1 = "pool.ntp.org";
 const char* ntpServer2 = "time.nist.gov";
 bool timeSynced = false;
 
-// ---------------- Timing ----------------
-const unsigned long SAMPLE_INTERVAL_MS = 5000;      // 5 seconds - sample + latest write
-const unsigned long HISTORY_INTERVAL_MS = 60000;    // 1 minute - history write
-const unsigned long WIFI_CHECK_INTERVAL_MS = 15000; // 15 seconds - WiFi watchdog
-
 unsigned long sampleprevMillis = 0;
 unsigned long historyPrevMillis = 0;
 unsigned long lastWifiCheck = 0;
-unsigned long sampleCount = 0;   
-unsigned long historyCount = 0;  
+unsigned long sampleCount = 0;
+unsigned long historyCount = 0;
 bool signUpOk = false;
-
 
 #define USE_PLACEHOLDER_DATA true
 
@@ -61,28 +65,23 @@ int moistureVal;
 const int drySoil = 3000;
 const int wetSoil = 1000;
 
-
 #define DHTPIN 4
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 float temperatureVal;
 
-// ---------------- Water Level Sensor ----------------
 int waterLevelPin = 34;
 int waterLevelRaw;
 int waterLevelVal;
 const int waterLevelMin = 0;
 const int waterLevelMax = 4095;
 
-// ---------------- Light Sensor (LDR) ----------------
 int lightPin = 35;
 int lightRaw;
 int lightVal;
 const int lightDark = 4095;
 const int lightBright = 0;
 
-// Prints current wall-clock time as a short prefix, e.g. [12:03:47]
-// Falls back to uptime if NTP hasn't synced yet.
 String nowPrefix() {
   if (timeSynced) {
     struct tm timeinfo;
@@ -93,6 +92,96 @@ String nowPrefix() {
     }
   }
   return "[+" + String(millis() / 1000) + "s] ";
+}
+
+void loadConfig() {
+  prefs.begin("cfg", false);
+  cfgSsid = prefs.getString("ssid", DEFAULT_WIFI_SSID);
+  cfgPass = prefs.getString("pass", DEFAULT_WIFI_PASSWORD);
+  cfgUserUid = prefs.getString("uid", DEFAULT_USER_UID);
+  cfgDeviceId = prefs.getString("devid", DEFAULT_DEVICE_ID);
+  cfgSampleInterval = prefs.getULong("sampint", DEFAULT_SAMPLE_INTERVAL_MS);
+  cfgHistoryInterval = prefs.getULong("histint", DEFAULT_HISTORY_INTERVAL_MS);
+  cfgWifiCheckInterval = prefs.getULong("wifiint", DEFAULT_WIFI_CHECK_INTERVAL_MS);
+  prefs.end();
+
+  LATEST_PATH = "/users/" + cfgUserUid + "/devices/" + cfgDeviceId + "/latest";
+  HISTORY_BASE = "/users/" + cfgUserUid + "/devices/" + cfgDeviceId + "/history";
+}
+
+void saveConfig(String ssid, String pass, String uid, String devid, unsigned long sampint, unsigned long histint, unsigned long wifiint) {
+  prefs.begin("cfg", false);
+  prefs.putString("ssid", ssid);
+  prefs.putString("pass", pass);
+  prefs.putString("uid", uid);
+  prefs.putString("devid", devid);
+  prefs.putULong("sampint", sampint);
+  prefs.putULong("histint", histint);
+  prefs.putULong("wifiint", wifiint);
+  prefs.end();
+}
+
+bool checkAuth() {
+  if (!server.authenticate(WEB_AUTH_USER, WEB_AUTH_PASS)) {
+    server.requestAuthentication();
+    return false;
+  }
+  return true;
+}
+
+String buildConfigPage() {
+  String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>";
+  html += "<title>FarmAssist Config</title>";
+  html += "<style>body{font-family:sans-serif;max-width:480px;margin:20px auto;padding:0 10px}";
+  html += "input{width:100%;padding:8px;margin:6px 0;box-sizing:border-box}";
+  html += "label{font-weight:bold}button{padding:10px 20px;margin-top:12px}</style></head><body>";
+  html += "<h2>FarmAssist Device Config</h2><form method='POST' action='/save'>";
+
+  html += "<label>WiFi SSID</label><input name='ssid' value='" + cfgSsid + "'>";
+  html += "<label>WiFi Password</label><input name='pass' type='password' value='" + cfgPass + "'>";
+  html += "<label>User UID</label><input name='uid' value='" + cfgUserUid + "'>";
+  html += "<label>Device ID</label><input name='devid' value='" + cfgDeviceId + "'>";
+  html += "<label>Latest Write Interval (ms)</label><input name='sampint' type='number' value='" + String(cfgSampleInterval) + "'>";
+  html += "<label>History Write Interval (ms)</label><input name='histint' type='number' value='" + String(cfgHistoryInterval) + "'>";
+  html += "<label>WiFi Check Interval (ms)</label><input name='wifiint' type='number' value='" + String(cfgWifiCheckInterval) + "'>";
+
+  html += "<button type='submit'>Save and Restart</button></form></body></html>";
+  return html;
+}
+
+void handleRoot() {
+  if (!checkAuth()) return;
+  server.send(200, "text/html", buildConfigPage());
+}
+
+void handleSave() {
+  if (!checkAuth()) return;
+
+  String ssid = server.arg("ssid");
+  String pass = server.arg("pass");
+  String uid = server.arg("uid");
+  String devid = server.arg("devid");
+  unsigned long sampint = server.arg("sampint").toInt();
+  unsigned long histint = server.arg("histint").toInt();
+  unsigned long wifiint = server.arg("wifiint").toInt();
+
+  if (sampint < 1000) sampint = 1000;
+  if (histint < 5000) histint = 5000;
+  if (wifiint < 5000) wifiint = 5000;
+
+  saveConfig(ssid, pass, uid, devid, sampint, histint, wifiint);
+
+  String html = "<html><body><h3>Saved. Restarting device...</h3></body></html>";
+  server.send(200, "text/html", html);
+
+  delay(1500);
+  ESP.restart();
+}
+
+void setupWebServer() {
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/save", HTTP_POST, handleSave);
+  server.begin();
 }
 
 bool syncTime() {
@@ -125,36 +214,42 @@ bool syncTime() {
 void setup() {
   Serial.begin(115200);
   delay(500);
+
+  loadConfig();
+
   Serial.println("\n\n===============================================");
   Serial.println("  FarmAssist ESP32 - Booting");
-  Serial.println("  User UID  : " + String(USER_UID));
-  Serial.println("  Device ID : " + String(DEVICE_ID));
+  Serial.println("  User UID  : " + cfgUserUid);
+  Serial.println("  Device ID : " + cfgDeviceId);
   Serial.println("  Data path : " + LATEST_PATH);
   Serial.println("===============================================");
 
-  // Safety check — refuse to run with a placeholder UID so you don't
-  // accidentally write data nobody's dashboard will ever see.
-  if (String(USER_UID) == "PASTE_YOUR_FIREBASE_UID_HERE") {
-    Serial.println("[FATAL] USER_UID not set! Copy your UID from the dashboard's Settings page.");
-    Serial.println("        Halting.");
-    while (true) delay(1000);
-  }
-
   dht.begin();
 
-  Serial.println("[WiFi] Connecting to SSID: " + String(WIFI_SSID));
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(AP_SSID, AP_PASSWORD);
+  Serial.println("[AP] SSID: " + String(AP_SSID));
+  Serial.println("[AP] IP  : " + WiFi.softAPIP().toString());
+
+  setupWebServer();
+
+  Serial.println("[WiFi] Connecting to SSID: " + cfgSsid);
+  WiFi.begin(cfgSsid.c_str(), cfgPass.c_str());
   int wifiAttempts = 0;
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED && wifiAttempts < 40) {
     Serial.print(".");
     delay(300);
     wifiAttempts++;
   }
   Serial.println();
-  Serial.println("[WiFi] Connected!");
-  Serial.println("[WiFi]   IP address : " + WiFi.localIP().toString());
-  Serial.println("[WiFi]   Signal RSSI: " + String(WiFi.RSSI()) + " dBm");
-  Serial.println("[WiFi]   Attempts   : " + String(wifiAttempts));
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("[WiFi] Connected!");
+    Serial.println("[WiFi]   IP address : " + WiFi.localIP().toString());
+    Serial.println("[WiFi]   Signal RSSI: " + String(WiFi.RSSI()) + " dBm");
+  } else {
+    Serial.println("[WiFi] FAILED to connect. AP config portal still available.");
+  }
 
   syncTime();
 
@@ -162,9 +257,6 @@ void setup() {
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
 
-  // Anonymous sign-in — the ESP32 doesn't need a Google account.
-  // Data isolation comes from USER_UID being baked into the write path,
-  // matching the dashboard's security model.
   if (Firebase.signUp(&config, &auth, "", "")) {
     Serial.println("[Firebase] Anonymous sign-in OK");
     signUpOk = true;
@@ -180,12 +272,12 @@ void setup() {
 
   Serial.println("===============================================");
   Serial.println("  Setup complete.");
-  Serial.println("  " + LATEST_PATH  + " -> updated every " + String(SAMPLE_INTERVAL_MS / 1000) + "s");
-  Serial.println("  " + HISTORY_BASE + " -> logged every "  + String(HISTORY_INTERVAL_MS / 1000) + "s");
+  Serial.println("  Config portal -> http://" + WiFi.softAPIP().toString());
+  Serial.println("  " + LATEST_PATH + " -> updated every " + String(cfgSampleInterval / 1000) + "s");
+  Serial.println("  " + HISTORY_BASE + " -> logged every " + String(cfgHistoryInterval / 1000) + "s");
   Serial.println("===============================================\n");
 }
 
-// Smoothly drifting placeholder value with a little jitter
 float placeholderWave(float minVal, float maxVal, unsigned long periodMs, float phaseOffset) {
   float t = (float)millis() / (float)periodMs;
   float wave = (sin(2.0 * PI * t + phaseOffset) + 1.0) / 2.0;
@@ -194,15 +286,14 @@ float placeholderWave(float minVal, float maxVal, unsigned long periodMs, float 
   return minVal + normalized * (maxVal - minVal);
 }
 
-// Runs every 5 seconds: reads sensors AND writes .../latest to Firebase
 void sampleSensors() {
   sampleCount++;
 
   if (USE_PLACEHOLDER_DATA) {
-    moistureVal    = (int)placeholderWave(20, 80, 60000, 0.0);
+    moistureVal = (int)placeholderWave(20, 80, 60000, 0.0);
     temperatureVal = placeholderWave(22.0, 34.0, 90000, 1.0);
-    waterLevelVal  = (int)placeholderWave(10, 100, 45000, 2.0);
-    lightVal       = (int)placeholderWave(0, 100, 30000, 3.0);
+    waterLevelVal = (int)placeholderWave(10, 100, 45000, 2.0);
+    lightVal = (int)placeholderWave(0, 100, 30000, 3.0);
   } else {
     soilVal = analogRead(soilPin);
     moistureVal = constrain(map(soilVal, drySoil, wetSoil, 0, 100), 0, 100);
@@ -220,13 +311,12 @@ void sampleSensors() {
     lightVal = constrain(map(lightRaw, lightDark, lightBright, 0, 100), 0, 100);
   }
 
-  unsigned long msUntilNextHistory = HISTORY_INTERVAL_MS - (millis() - historyPrevMillis);
+  unsigned long msUntilNextHistory = cfgHistoryInterval - (millis() - historyPrevMillis);
   Serial.println(nowPrefix() + "[Sample #" + String(sampleCount) + "] Moisture=" + String(moistureVal) +
                   "% Temp=" + String(temperatureVal, 1) + "C Water=" + String(waterLevelVal) +
                   "% Light=" + String(lightVal) + "%  (next history write in " +
                   String(msUntilNextHistory / 1000) + "s)");
 
-  // ---- Write .../latest every 5 seconds ----
   if (Firebase.ready() && signUpOk) {
     time_t now;
     struct tm timeinfo;
@@ -257,7 +347,6 @@ void sampleSensors() {
   }
 }
 
-// Runs every 60 seconds: writes one entry under .../history
 void saveHistoryToFirebase() {
   historyCount++;
   Serial.println("-----------------------------------------------");
@@ -298,8 +387,8 @@ void saveHistoryToFirebase() {
   json.set("temperature", temperatureVal);
   json.set("waterLevel", waterLevelVal);
   json.set("light", lightVal);
-  json.set("value", temperatureVal);  // 'value' for chart compat
-  json.set("timestamp", (double)now * 1000.0);  // ms epoch (matches frontend)
+  json.set("value", temperatureVal);
+  json.set("timestamp", (double)now * 1000.0);
   json.set("timestamp_epoch", (double)now);
   json.set("timestamp_str", timeStr);
 
@@ -320,24 +409,23 @@ void saveHistoryToFirebase() {
 }
 
 void loop() {
+  server.handleClient();
+
   unsigned long now = millis();
 
-  // ---- Every 15 seconds: WiFi watchdog ----
-  if (now - lastWifiCheck > WIFI_CHECK_INTERVAL_MS) {
+  if (now - lastWifiCheck > cfgWifiCheckInterval) {
     lastWifiCheck = now;
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println(nowPrefix() + "[WiFi] WARNING: disconnected, attempting reconnect...");
     }
   }
 
-  // ---- Every 5 seconds: sample sensors + write .../latest ----
-  if (now - sampleprevMillis > SAMPLE_INTERVAL_MS || sampleprevMillis == 0) {
+  if (now - sampleprevMillis > cfgSampleInterval || sampleprevMillis == 0) {
     sampleprevMillis = now;
     sampleSensors();
   }
 
-  // ---- Every 1 minute: write one entry to .../history ----
-  if (now - historyPrevMillis > HISTORY_INTERVAL_MS || historyPrevMillis == 0) {
+  if (now - historyPrevMillis > cfgHistoryInterval || historyPrevMillis == 0) {
     historyPrevMillis = now;
     saveHistoryToFirebase();
   }

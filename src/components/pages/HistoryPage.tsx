@@ -202,7 +202,7 @@ export default function HistoryPage({
         <div>
           <h2 className="text-xl font-bold text-white">History</h2>
           <p className="text-sm text-slate-400">
-            Record and review sensor data sessions
+            Log your sensor data history for your plant
           </p>
         </div>
 
@@ -328,9 +328,9 @@ export default function HistoryPage({
       ) : sessions.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] py-16">
           <FileText className="mb-3 h-12 w-12 text-slate-600" />
-          <p className="text-sm text-slate-400">No sessions recorded yet</p>
+          <p className="text-sm text-slate-400">Nothing</p>
           <p className="text-xs text-slate-500">
-            Click &quot;Start Recording&quot; to begin capturing sensor data
+            Click &quot;Start Recording&quot; to begin logging
           </p>
         </div>
       ) : (

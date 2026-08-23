@@ -325,9 +325,7 @@ export default function SettingsPage({
             Your User ID
           </h3>
           <p className="mb-3 text-xs text-slate-400">
-            This is your unique Firebase Auth UID. The ESP32 uses this to write
-            data to your personal database path. Copy this and paste it into your
-            ESP32 Arduino sketch as <code className="rounded bg-[#0a1628] px-1 text-cyan-400">USER_UID</code>.
+            This is your unique UID. The Rover connects to your account using this ID. The UID gives you permission to view the data <code className="rounded bg-[#0a1628] px-1 text-cyan-400">USER_UID</code>.
           </p>
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -358,11 +356,11 @@ export default function SettingsPage({
           </div>
           <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-950/20 p-3">
             <p className="text-xs text-amber-400">
-              ⚠️ Update your ESP32 sketch with this UID before flashing.
+              ⚠️ Don't forget to activate your account with the Rover.
               Change the <code className="font-mono">USER_UID</code> define to:
             </p>
             <code className="mt-1 block rounded bg-[#0a1628] px-2 py-1 text-xs text-cyan-400 font-mono">
-              #define USER_UID &quot;{userUID}&quot;
+              #Here is your account UID: &quot;{userUID}&quot;
             </code>
           </div>
         </div>
@@ -370,11 +368,10 @@ export default function SettingsPage({
         {/* Device Pairing */}
         <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
           <h3 className="mb-3 text-sm font-semibold text-white">
-            Device Pairing
+            Rover ID
           </h3>
           <p className="mb-3 text-xs text-slate-400">
-            Enter the device ID of your ESP32 to view its sensor data. The
-            device ID is set in the ESP32 Arduino sketch.
+           Enter the Rover's ID below to pair it with your account. Please make sure the Rover ID is matched with the one linked with your account.
           </p>
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -407,7 +404,7 @@ export default function SettingsPage({
           </p>
           <div className="mt-3 rounded-xl border border-cyan-900/20 bg-[#0a1628] p-3">
             <p className="text-[11px] text-slate-500">
-              Your data path: <span className="font-mono text-cyan-400">users/{userUID || "..."}/devices/{deviceId}/</span>
+              Your data path: Contact Support
             </p>
           </div>
         </div>
@@ -417,10 +414,10 @@ export default function SettingsPage({
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-white">
-                Sensor Ranges
+                Sensor Range
               </h3>
               <p className="text-xs text-slate-400">
-                Drag a slider or type an exact value. Values outside these ranges trigger warnings.
+                Select the optimal ranges for your plants. The dashboard will highlight when readings are outside these ranges.
               </p>
             </div>
             <button
@@ -529,7 +526,7 @@ export default function SettingsPage({
             )}
           </button>
           <p className="mt-2 text-center text-[10px] text-slate-500">
-            Ranges sync across all your devices and persist after refresh
+            Ranges will be synced to all devices connected to your account.
           </p>
         </div>
 
@@ -606,9 +603,9 @@ export default function SettingsPage({
           <h3 className="mb-3 text-sm font-semibold text-white">About</h3>
           <div className="space-y-2 text-xs text-slate-400">
             <p>FarmAssist IoT Dashboard Powered by Minetallest v0.1.0</p>
-            <p>Monitoring System</p>
+            <p>Contact Support: myrealmetvreal@gmail.com</p>
             <p className="text-slate-500">
-              Built with Next.js, Firebase, and Tailwind CSS
+              Built with Love By Minetallest😘😘😘. All rights reserved. &copy; 2026
             </p>
           </div>
         </div>

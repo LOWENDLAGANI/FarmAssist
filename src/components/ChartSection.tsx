@@ -205,10 +205,10 @@ export default function ChartSection({
           <div className="text-center">
             <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-slate-800/50" />
             <p className="text-sm text-slate-400">
-              Waiting for sensor data…
+              Waiting…
             </p>
             <p className="text-xs text-slate-500">
-              Chart will populate once readings are received
+              Chart will show up once data points are available. Need at least 2 data points to render a chart.
             </p>
           </div>
         </div>
