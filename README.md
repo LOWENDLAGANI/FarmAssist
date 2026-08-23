@@ -7,5 +7,3 @@ This is created using JS
 npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
-
->>>>>>> fe3ae85 (First Commit)
