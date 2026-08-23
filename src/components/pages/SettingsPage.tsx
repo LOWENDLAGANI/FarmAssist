@@ -28,6 +28,7 @@ import {
 import { useAppTheme } from "../ThemeProvider";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
 import RoverOverviewCard from "../RoverOverviewCard";
+import CustomThemeBuilder from "../CustomThemeBuilder";
 import { formatLastSeen } from "@/lib/formatLastSeen";
 import type { ConnectionStatus, SensorKey } from "@/types/telemetry";
 import { SENSOR_META } from "@/types/telemetry";
@@ -115,7 +116,7 @@ function RangeNumberInput({ label, value, step, onCommit }: RangeNumberInputProp
       onKeyDown={(event) => {
         if (event.key === "Enter") event.currentTarget.blur();
       }}
-      className="w-full rounded-lg border border-cyan-900/20 bg-[#0c1a2e] px-3 py-2 text-xs text-white outline-none transition-colors focus:border-cyan-500/50"
+      className="w-full rounded-lg border border-cyan-900/20 bg-[#0c1a2e] px-3 py-2 text-xs text-white outline-none transition-all focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20"
     />
   );
 }
@@ -225,7 +226,7 @@ function VisualRangeSelector({
               aria-valuenow={value}
               aria-valuetext={`${value} ${unit}`}
               onKeyDown={(event) => handleKeyboard(event, handle)}
-              className="absolute top-1/2 z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-[#0c1a2e] bg-sky-100 shadow-[0_0_0_2px_#22d3ee,0_2px_8px_rgba(6,182,212,0.45)] outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+              className="absolute top-1/2 z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-[#0c1a2e] bg-sky-100 shadow-[0_0_0_2px_#22d3ee,0_2px_8px_rgba(6,182,212,0.45)] outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 transition-transform hover:scale-125"
               style={{ left: `${percent}%` }}
             />
           );
@@ -249,7 +250,7 @@ export default function SettingsPage({
   userUID,
   onCreateNotification,
 }: SettingsPageProps) {
-  const { theme, setTheme, themes } = useAppTheme();
+  const { theme, setTheme, themes, customTheme, setCustomTheme, applyCustomTheme } = useAppTheme();
   const { registerDevice, forceRegisterDevice, unlinkDevice, status: deviceLinkStatus, registryInfo } = useDeviceValidation(userUID, deviceId);
   const [deviceInput, setDeviceInput] = useState(deviceId);
   const [saved, setSaved] = useState(false);
@@ -259,6 +260,7 @@ export default function SettingsPage({
   const [showForcePairConfirm, setShowForcePairConfirm] = useState(false);
   const [unlinked, setUnlinked] = useState(false);
   const [forcePaired, setForcePaired] = useState(false);
+  const [showCustomBuilder, setShowCustomBuilder] = useState(false);
 
   // ── Local editing state for ranges ──────────────────────────
   const [editingRanges, setEditingRanges] = useState<SensorRanges>(sensorRanges);
@@ -373,7 +375,7 @@ export default function SettingsPage({
   };
 
   return (
-    <div>
+    <div className="animate-fade-in">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-white">Settings</h2>
         <p className="text-sm text-slate-400">
@@ -383,15 +385,17 @@ export default function SettingsPage({
 
       <div className="space-y-4">
         {/* Rover Overview */}
-        <RoverOverviewCard
-          deviceId={deviceId}
-          connectionStatus={status}
-          linkStatus={deviceLinkStatus}
-          registryInfo={registryInfo}
-        />
+        <div className="animate-slide-up stagger-1">
+          <RoverOverviewCard
+            deviceId={deviceId}
+            connectionStatus={status}
+            linkStatus={deviceLinkStatus}
+            registryInfo={registryInfo}
+          />
+        </div>
 
         {/* User UID (for ESP32 pairing) */}
-        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-2">
           <h3 className="mb-3 text-sm font-semibold text-white">
             Your User ID
           </h3>
@@ -410,7 +414,7 @@ export default function SettingsPage({
             </div>
             <button
               onClick={handleCopyUID}
-              className="flex items-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-colors hover:bg-cyan-500/30"
+              className="flex items-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-all hover:bg-cyan-500/30 hover:scale-[1.02] active:scale-[0.98]"
             >
               {uidCopied ? (
                 <>
@@ -437,7 +441,7 @@ export default function SettingsPage({
         </div>
 
         {/* Device Pairing */}
-        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-3">
           <h3 className="mb-3 text-sm font-semibold text-white">
             Rover ID
           </h3>
@@ -453,12 +457,12 @@ export default function SettingsPage({
                 onChange={(e) => setDeviceInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSaveDevice()}
                 placeholder="e.g. esp32-farm-001"
-                className="w-full rounded-xl border border-cyan-900/20 bg-[#0a1628] py-3 pl-9 pr-4 text-sm text-white placeholder-slate-500 outline-none transition-colors focus:border-cyan-500/50"
+                className="w-full rounded-xl border border-cyan-900/20 bg-[#0a1628] py-3 pl-9 pr-4 text-sm text-white placeholder-slate-500 outline-none transition-all focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20"
               />
             </div>
             <button
               onClick={handleSaveDevice}
-              className="flex items-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-colors hover:bg-cyan-500/30"
+              className="flex items-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-all hover:bg-cyan-500/30 hover:scale-[1.02] active:scale-[0.98]"
             >
               {saved ? (
                 <>
@@ -484,7 +488,7 @@ export default function SettingsPage({
                 </p>
                 <button
                   onClick={() => setShowUnlinkConfirm(true)}
-                  className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-950/20 px-2.5 py-1 text-[10px] text-red-400 transition-colors hover:border-red-500/40 hover:bg-red-950/40"
+                  className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-950/20 px-2.5 py-1 text-[10px] text-red-400 transition-all hover:border-red-500/40 hover:bg-red-950/40 hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Unlink className="h-3 w-3" />
                   Unlink
@@ -506,7 +510,7 @@ export default function SettingsPage({
                 </p>
                 <button
                   onClick={() => setShowForcePairConfirm(true)}
-                  className="flex items-center gap-1 rounded-lg border border-amber-500/20 bg-amber-950/20 px-2.5 py-1 text-[10px] text-amber-400 transition-colors hover:border-amber-500/40 hover:bg-amber-950/40"
+                  className="flex items-center gap-1 rounded-lg border border-amber-500/20 bg-amber-950/20 px-2.5 py-1 text-[10px] text-amber-400 transition-all hover:border-amber-500/40 hover:bg-amber-950/40 hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <AlertTriangle className="h-3 w-3" />
                   Force Pair
@@ -557,7 +561,7 @@ export default function SettingsPage({
                 className="absolute inset-0 bg-black/70 backdrop-blur-sm"
                 onClick={() => setShowForcePairConfirm(false)}
               />
-              <div className="relative w-full max-w-sm rounded-2xl border border-amber-500/30 bg-[#0c1a2e] p-0 shadow-2xl shadow-amber-950/50 overflow-hidden">
+              <div className="relative w-full max-w-sm rounded-2xl border border-amber-500/30 bg-[#0c1a2e] p-0 shadow-2xl shadow-amber-950/50 overflow-hidden animate-scale-in">
                 <div className="flex items-center justify-between border-b border-amber-900/30 bg-amber-950/30 px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20">
@@ -583,13 +587,13 @@ export default function SettingsPage({
                 <div className="flex items-center justify-end gap-3 border-t border-cyan-900/20 px-6 py-4">
                   <button
                     onClick={() => setShowForcePairConfirm(false)}
-                    className="rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2 text-sm text-slate-400 transition-colors hover:bg-[#0f2240] hover:text-white"
+                    className="rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2 text-sm text-slate-400 transition-all hover:bg-[#0f2240] hover:text-white hover:scale-[1.02] active:scale-[0.98]"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleForcePair}
-                    className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/30"
+                    className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-400 transition-all hover:bg-amber-500/30 hover:scale-[1.02] active:scale-[0.98]"
                   >
                     Force Pair
                   </button>
@@ -605,7 +609,7 @@ export default function SettingsPage({
                 className="absolute inset-0 bg-black/70 backdrop-blur-sm"
                 onClick={() => setShowUnlinkConfirm(false)}
               />
-              <div className="relative w-full max-w-sm rounded-2xl border border-red-500/30 bg-[#0c1a2e] p-0 shadow-2xl shadow-red-950/50 overflow-hidden">
+              <div className="relative w-full max-w-sm rounded-2xl border border-red-500/30 bg-[#0c1a2e] p-0 shadow-2xl shadow-red-950/50 overflow-hidden animate-scale-in">
                 <div className="flex items-center justify-between border-b border-red-900/30 bg-red-950/30 px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/20">
@@ -631,13 +635,13 @@ export default function SettingsPage({
                 <div className="flex items-center justify-end gap-3 border-t border-cyan-900/20 px-6 py-4">
                   <button
                     onClick={() => setShowUnlinkConfirm(false)}
-                    className="rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2 text-sm text-slate-400 transition-colors hover:bg-[#0f2240] hover:text-white"
+                    className="rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2 text-sm text-slate-400 transition-all hover:bg-[#0f2240] hover:text-white hover:scale-[1.02] active:scale-[0.98]"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleUnlinkDevice}
-                    className="rounded-xl bg-red-500/20 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/30"
+                    className="rounded-xl bg-red-500/20 px-4 py-2 text-sm font-medium text-red-400 transition-all hover:bg-red-500/30 hover:scale-[1.02] active:scale-[0.98]"
                   >
                     Unlink Rover
                   </button>
@@ -648,7 +652,7 @@ export default function SettingsPage({
         </div>
 
         {/* Sensor Ranges */}
-        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-4">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-white">
@@ -660,7 +664,7 @@ export default function SettingsPage({
             </div>
             <button
               onClick={handleResetRanges}
-              className="flex items-center gap-1.5 rounded-lg border border-cyan-900/20 bg-[#0a1628] px-3 py-1.5 text-xs text-slate-400 transition-colors hover:bg-[#0f2240] hover:text-white"
+              className="flex items-center gap-1.5 rounded-lg border border-cyan-900/20 bg-[#0a1628] px-3 py-1.5 text-xs text-slate-400 transition-all hover:bg-[#0f2240] hover:text-white hover:scale-[1.02] active:scale-[0.98]"
             >
               <RotateCcw className="h-3 w-3" />
               Reset
@@ -675,7 +679,7 @@ export default function SettingsPage({
               return (
                 <div
                   key={key}
-                  className="rounded-xl border border-cyan-900/10 bg-[#0a1628] p-4"
+                  className="rounded-xl border border-cyan-900/10 bg-[#0a1628] p-4 transition-all hover:border-cyan-800/30"
                 >
                   <div className="mb-2 flex items-center gap-2">
                     <Sliders className="h-3.5 w-3.5" style={{ color: meta.hexColor }} />
@@ -733,7 +737,7 @@ export default function SettingsPage({
                   {/* Visual range indicator */}
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#0c1a2e]">
                     <div
-                      className="h-full rounded-full"
+                      className="h-full rounded-full transition-all"
                       style={{
                         backgroundColor: meta.hexColor,
                         marginLeft: `${Math.max(0, (range.optimalMin / meta.max) * 100)}%`,
@@ -749,7 +753,7 @@ export default function SettingsPage({
 
           <button
             onClick={handleSaveRanges}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-colors hover:bg-cyan-500/30"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-all hover:bg-cyan-500/30 hover:scale-[1.02] active:scale-[0.98]"
           >
             {rangesSaved ? (
               <>
@@ -769,19 +773,25 @@ export default function SettingsPage({
         </div>
 
         {/* Theme */}
-        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-5">
           <h3 className="mb-3 text-sm font-semibold text-white">
             Appearance
           </h3>
           <p className="mb-3 text-xs text-slate-400">
             Choose a theme that suits your preference
           </p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {themes.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTheme(t.id)}
-                className={`flex flex-col items-center gap-1 rounded-xl border p-3 transition-all ${
+                onClick={() => {
+                  if (t.id === "custom") {
+                    setShowCustomBuilder(true);
+                  } else {
+                    setTheme(t.id);
+                  }
+                }}
+                className={`flex flex-col items-center gap-1 rounded-xl border p-3 transition-all hover:scale-[1.03] active:scale-[0.97] ${
                   theme === t.id
                     ? "border-cyan-500/50 bg-cyan-500/10 shadow-lg shadow-cyan-500/10"
                     : "border-cyan-900/20 bg-[#0a1628] hover:border-cyan-800/30 hover:bg-[#0f2240]"
@@ -800,10 +810,32 @@ export default function SettingsPage({
               </button>
             ))}
           </div>
+
+          {/* Custom Theme Builder Modal */}
+          {showCustomBuilder && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div
+                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                onClick={() => setShowCustomBuilder(false)}
+              />
+              <div className="relative w-full max-w-md rounded-2xl border border-cyan-500/30 bg-[#0c1a2e] p-6 shadow-2xl shadow-cyan-950/50 overflow-hidden animate-scale-in max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-white">Custom Theme</h3>
+                  <button
+                    onClick={() => setShowCustomBuilder(false)}
+                    className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <CustomThemeBuilder onClose={() => setShowCustomBuilder(false)} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Notifications */}
-        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-6">
           <h3 className="mb-3 text-sm font-semibold text-white">
             Notifications
           </h3>
@@ -812,7 +844,7 @@ export default function SettingsPage({
           </p>
           <button
             onClick={handleTestNotification}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-colors hover:bg-cyan-500/30"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-all hover:bg-cyan-500/30 hover:scale-[1.02] active:scale-[0.98]"
           >
             <Bell className="h-4 w-4" />
             Send Test Notification
@@ -823,12 +855,12 @@ export default function SettingsPage({
         </div>
 
         {/* Connection Info */}
-        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-6">
           <h3 className="mb-3 text-sm font-semibold text-white">
             Connection
           </h3>
           <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-xl bg-[#0a1628] p-3">
+            <div className="flex items-center justify-between rounded-xl bg-[#0a1628] p-3 transition-all hover:bg-[#0f2240]">
               <div className="flex items-center gap-2">
                 <Wifi className="h-4 w-4 text-slate-400" />
                 <span className="text-sm text-slate-300">Status</span>
@@ -849,14 +881,14 @@ export default function SettingsPage({
                     : "Offline"}
               </span>
             </div>
-            <div className="flex items-center justify-between rounded-xl bg-[#0a1628] p-3">
+            <div className="flex items-center justify-between rounded-xl bg-[#0a1628] p-3 transition-all hover:bg-[#0f2240]">
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4 text-slate-400" />
                 <span className="text-sm text-slate-300">Database</span>
               </div>
               <span className="text-xs text-slate-400">Realtime DB</span>
             </div>
-            <div className="flex items-center justify-between rounded-xl bg-[#0a1628] p-3">
+            <div className="flex items-center justify-between rounded-xl bg-[#0a1628] p-3 transition-all hover:bg-[#0f2240]">
               <div className="flex items-center gap-2">
                 <Cpu className="h-4 w-4 text-slate-400" />
                 <span className="text-sm text-slate-300">Device</span>
@@ -867,7 +899,7 @@ export default function SettingsPage({
         </div>
 
         {/* About */}
-        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-6">
           <h3 className="mb-3 text-sm font-semibold text-white">About</h3>
           <div className="space-y-2 text-xs text-slate-400">
             <p>FarmAssist IoT Dashboard Powered by Minetallest v0.1.0</p>

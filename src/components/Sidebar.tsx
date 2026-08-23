@@ -44,7 +44,7 @@ export default function Sidebar({ activePage, onNavigate, settingsAlert }: Sideb
   return (
     <aside className="hidden h-full w-16 shrink-0 flex-col items-center border-r border-cyan-900/30 bg-[#0a1628] py-4 md:flex md:w-20">
       {/* ── Logo ── */}
-      <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400">
+      <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400 animate-float">
         <Leaf className="h-5 w-5" />
       </div>
 
@@ -61,16 +61,16 @@ export default function Sidebar({ activePage, onNavigate, settingsAlert }: Sideb
               title={item.label}
               aria-label={item.label}
               aria-current={isActive ? "page" : undefined}
-              className={`group relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200 ${
+              className={`group relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${
                 isActive
-                  ? "bg-cyan-500/20 text-cyan-400"
+                  ? "bg-cyan-500/20 text-cyan-400 shadow-lg shadow-cyan-500/10"
                   : "text-slate-500 hover:bg-slate-800/50 hover:text-slate-300"
               }`}
             >
               {isActive && (
-                <div className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-cyan-400" />
+                <div className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-cyan-400 transition-all" />
               )}
-              <Icon className="h-5 w-5" />
+              <Icon className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
               {item.id === "settings" && settingsAlert && (
                 <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400 animate-pulse-dot" />
               )}

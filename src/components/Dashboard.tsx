@@ -43,6 +43,9 @@ import SettingsPage from "./pages/SettingsPage";
 /** Ordered list of sensor keys displayed in the card grid. */
 const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light"];
 
+/** Stagger delay classes for sensor cards */
+const STAGGER_CLASSES = ["stagger-1", "stagger-2", "stagger-3", "stagger-4"];
+
 export default function Dashboard() {
   const isMobile = useIsMobile();
   const { user } = useAuth();
@@ -200,7 +203,7 @@ export default function Dashboard() {
 
           {/* Loading state */}
           {isLoading && (
-            <div className="mb-4 flex items-center gap-2 rounded-xl border border-cyan-900/30 bg-[#0c1a2e] p-3 sm:mb-6 sm:p-4">
+            <div className="mb-4 flex items-center gap-2 rounded-xl border border-cyan-900/30 bg-[#0c1a2e] p-3 sm:mb-6 sm:p-4 animate-fade-in">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
               <span className="text-sm text-slate-400">
                 Connecting to device…
@@ -221,7 +224,7 @@ export default function Dashboard() {
             <>
               <div
                 onClick={() => setShowError(true)}
-                className="mb-4 cursor-pointer rounded-xl border border-red-800/40 bg-red-950/30 p-3 transition-colors hover:border-red-600/50 sm:mb-6 sm:p-4"
+                className="mb-4 cursor-pointer rounded-xl border border-red-800/40 bg-red-950/30 p-3 transition-all hover:border-red-600/50 hover:scale-[1.01] active:scale-[0.99] sm:mb-6 sm:p-4"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-red-400 flex-1">{error}</span>
@@ -236,77 +239,88 @@ export default function Dashboard() {
 
           {/* ── Dashboard page ── */}
           {activePage === "dashboard" && (
-            <>
+            <div className="animate-fade-in">
               <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 lg:grid-cols-4">
-                {SENSOR_KEYS.map((key) => (
-                  <SensorCard
-                    key={key}
-                    sensorKey={key}
-                    value={sensorValues[key]}
-                    isSelected={activeSensor === key}
-                    onSelect={handleSelectSensor}
-                    compact={isMobile}
-                    range={ranges[key]}
-                  />
+                {SENSOR_KEYS.map((key, index) => (
+                  <div key={key} className={`animate-slide-up ${STAGGER_CLASSES[index]}`}>
+                    <SensorCard
+                      sensorKey={key}
+                      value={sensorValues[key]}
+                      isSelected={activeSensor === key}
+                      onSelect={handleSelectSensor}
+                      compact={isMobile}
+                      range={ranges[key]}
+                    />
+                  </div>
                 ))}
               </div>
 
-              <div className="mb-6 sm:mb-8">
+              <div className="mb-6 sm:mb-8 animate-slide-up stagger-4">
                 <ChartSection
                   activeSensor={activeSensor}
                   history={chartHistory}
                 />
               </div>
 
-              <RecommendationPanel recommendations={recommendations} />
-            </>
+              <div className="animate-slide-up stagger-5">
+                <RecommendationPanel recommendations={recommendations} />
+              </div>
+            </div>
           )}
 
           {/* ── Notifications page ── */}
           {activePage === "notifications" && (
-            <NotificationsPage
-              notifications={notifications}
-              unreadCount={unreadCount}
-              onMarkRead={(id) => markRead(userId, id)}
-              onMarkAllRead={() => markAllRead(userId)}
-            />
+            <div className="animate-fade-in">
+              <NotificationsPage
+                notifications={notifications}
+                unreadCount={unreadCount}
+                onMarkRead={(id) => markRead(userId, id)}
+                onMarkAllRead={() => markAllRead(userId)}
+              />
+            </div>
           )}
 
           {/* ── Camera page ── */}
           {activePage === "camera" && (
-            <CameraPage />
+            <div className="animate-fade-in">
+              <CameraPage />
+            </div>
           )}
 
           {/* ── History page ── */}
           {activePage === "history" && (
-            <HistoryPage
-              sessions={sessions}
-              activeSession={activeSession}
-              isLoading={sessionsLoading}
-              onStartSession={startSession}
-              onStopSession={stopSession}
-              onRenameSession={renameSession}
-              onUpdateNotes={updateNotes}
-              onDeleteSession={deleteSession}
-              onLoadSessionData={loadSessionData}
-              onSubscribeSessionData={subscribeToSessionData}
-              onExportCSV={exportSessionCSV}
-            />
+            <div className="animate-fade-in">
+              <HistoryPage
+                sessions={sessions}
+                activeSession={activeSession}
+                isLoading={sessionsLoading}
+                onStartSession={startSession}
+                onStopSession={stopSession}
+                onRenameSession={renameSession}
+                onUpdateNotes={updateNotes}
+                onDeleteSession={deleteSession}
+                onLoadSessionData={loadSessionData}
+                onSubscribeSessionData={subscribeToSessionData}
+                onExportCSV={exportSessionCSV}
+              />
+            </div>
           )}
 
           {/* ── Settings page ── */}
           {activePage === "settings" && (
-            <SettingsPage
-              status={status}
-              lastUpdated={lastUpdated}
-              deviceId={deviceId}
-              onDeviceChange={setDevice}
-              sensorRanges={ranges}
-              onRangesSave={updateRanges}
-              onRangesReset={resetRanges}
-              userUID={userId}
-              onCreateNotification={createNotification}
-            />
+            <div className="animate-fade-in">
+              <SettingsPage
+                status={status}
+                lastUpdated={lastUpdated}
+                deviceId={deviceId}
+                onDeviceChange={setDevice}
+                sensorRanges={ranges}
+                onRangesSave={updateRanges}
+                onRangesReset={resetRanges}
+                userUID={userId}
+                onCreateNotification={createNotification}
+              />
+            </div>
           )}
         </main>
 

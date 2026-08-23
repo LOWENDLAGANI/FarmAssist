@@ -70,35 +70,37 @@ export default function SensorCard({
   return (
     <button
       onClick={() => onSelect(sensorKey)}
-      className={`group flex flex-col items-center rounded-2xl border p-3 transition-all duration-200 sm:p-5 ${
+      className={`group flex flex-col items-center rounded-2xl border p-3 transition-all duration-300 sm:p-5 hover-lift ${
         isSelected
           ? "border-cyan-500/40 bg-[#0d1f35] shadow-lg shadow-cyan-500/10"
-          : "border-cyan-900/20 bg-[#0c1a2e] hover:border-cyan-800/30 hover:bg-[#0f2240]"
+          : "border-cyan-900/20 bg-[#0c1a2e] hover:border-cyan-800/30 hover:bg-[#0f2240] hover:shadow-xl hover:shadow-cyan-500/5"
       }`}
       aria-pressed={isSelected}
       aria-label={`Select ${meta.label} for chart display`}
     >
       {/* ── Label ── */}
       <span
-        className={`font-medium ${compact ? "mb-1 text-xs" : "mb-3 text-sm"}`}
+        className={`font-medium transition-colors ${compact ? "mb-1 text-xs" : "mb-3 text-sm"}`}
         style={{ color: meta.hexColor }}
       >
         {meta.label}
       </span>
 
       {/* ── Circular Gauge ── */}
-      <CircularGauge
-        value={value ?? 0}
-        min={meta.min}
-        max={meta.max}
-        color={meta.hexColor}
-        unit={meta.unit}
-        decimals={sensorKey === "temperature" ? 1 : 0}
-        size={compact ? 120 : 160}
-      />
+      <div className="transition-transform duration-300 group-hover:scale-105">
+        <CircularGauge
+          value={value ?? 0}
+          min={meta.min}
+          max={meta.max}
+          color={meta.hexColor}
+          unit={meta.unit}
+          decimals={sensorKey === "temperature" ? 1 : 0}
+          size={compact ? 120 : 160}
+        />
+      </div>
 
       {/* ── Status ── */}
-      <span className={`mt-1 text-xs font-semibold sm:mt-2 sm:text-sm ${statusColor}`}>
+      <span className={`mt-1 text-xs font-semibold sm:mt-2 sm:text-sm transition-colors ${statusColor}`}>
         {statusText}
       </span>
 
