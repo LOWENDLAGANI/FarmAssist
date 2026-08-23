@@ -12,7 +12,7 @@
 
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   XAxis,
   YAxis,
@@ -29,6 +29,8 @@ interface ChartSectionProps {
   activeSensor: SensorKey;
   history: ChartDataPoint[];
 }
+
+const DATA_POINT_OPTIONS = [10, 15, 25, 50, 100] as const;
 
 /** Formats a Unix timestamp for display on the X axis. */
 function formatTime(ts: number): string {
@@ -52,9 +54,13 @@ export default function ChartSection({
   history,
 }: ChartSectionProps) {
   const meta = SENSOR_META[activeSensor];
+  const pointCountSelectId = useId();
+  const [pointCount, setPointCount] = useState<number>(15);
 
   const chartData = useMemo(() => {
-    return history.map((point) => ({
+    const visibleHistory = pointCount === 0 ? history : history.slice(-pointCount);
+
+    return visibleHistory.map((point) => ({
       timestamp: point.timestamp,
       value:
         activeSensor === "temperature"
@@ -67,30 +73,50 @@ export default function ChartSection({
                 ? (point.light ?? point.value)
                 : point.value,
     }));
-  }, [history, activeSensor]);
+  }, [history, activeSensor, pointCount]);
 
   const hasData = chartData.length > 1;
 
   return (
     <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-4 sm:p-6">
       {/* ── Chart header ── */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-white">
             Live {meta.label} Telemetry
           </h2>
           <p className="text-sm text-slate-400">
-            Last {history.length} data points
+            Showing {chartData.length} of {history.length} data points
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            className="inline-block h-3 w-3 rounded-full"
-            style={{ backgroundColor: meta.hexColor }}
-          />
-          <span className="text-sm text-slate-400">
-            {meta.unit}
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-block h-3 w-3 rounded-full"
+              style={{ backgroundColor: meta.hexColor }}
+            />
+            <span className="text-sm text-slate-400">{meta.unit}</span>
+          </div>
+          <label
+            htmlFor={pointCountSelectId}
+            className="flex items-center gap-2 text-xs text-slate-400"
+          >
+            <span className="whitespace-nowrap">Display</span>
+            <select
+              id={pointCountSelectId}
+              value={pointCount}
+              onChange={(event) => setPointCount(Number(event.target.value))}
+              className="rounded-lg border border-cyan-900/40 bg-[#0a1628] px-2 py-1.5 text-sm text-slate-200 outline-none transition-colors focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+              aria-label="Number of data points to display"
+            >
+              {DATA_POINT_OPTIONS.map((count) => (
+                <option key={count} value={count}>
+                  Last {count}
+                </option>
+              ))}
+              <option value={0}>All</option>
+            </select>
+          </label>
         </div>
       </div>
 

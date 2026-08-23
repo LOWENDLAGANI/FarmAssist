@@ -8,25 +8,29 @@
 
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useState, useEffect } from "react";
 
 export function useMediaQuery(query: string): boolean {
-  const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      const mediaQuery = window.matchMedia(query);
-      mediaQuery.addEventListener("change", onStoreChange);
-      return () => mediaQuery.removeEventListener("change", onStoreChange);
-    },
-    [query]
-  );
+  // Initialize state with the current match — safe because this component
+  // is "use client" so window is available on first render.
+  const [matches, setMatches] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.matchMedia(query).matches;
+    }
+    return false;
+  });
 
-  const getSnapshot = useCallback(
-    () => window.matchMedia(query).matches,
-    [query]
-  );
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
+    // The server cannot know the viewport. Sync after hydration so the
+    // component does not remain in the server-rendered desktop state.
+    setMatches(mql.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, [query]);
 
-  // Rendering a desktop-safe fallback on the server avoids accessing window.
-  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+  return matches;
 }
 
 /** Convenience hook — true when viewport < 768px. */
