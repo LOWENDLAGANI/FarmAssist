@@ -35,6 +35,7 @@ import type {
 } from "@/types/telemetry";
 import {
   MAX_HISTORY_SIZE,
+  PRUNE_THRESHOLD,
   DEFAULT_STALE_THRESHOLD_MS,
 } from "@/types/telemetry";
 
@@ -91,10 +92,25 @@ export function useTelemetry(
           const points: ChartDataPoint[] = [];
           snapshot.forEach((childSnap) => {
             const val = childSnap.val();
-            if (val && typeof val.timestamp === "number" && typeof val.value === "number") {
-              points.push({ timestamp: val.timestamp, value: val.value });
-            }
+            if (!val) return;
+
+            // Support both schemas:
+            //   Frontend: { timestamp, value, temperature, moisture, waterLevel, light }
+            //   ESP32:    { timestamp, value, timestamp_epoch, temperature, moisture, waterLevel, light }
+            const ts = val.timestamp ?? val.timestamp_epoch;
+            if (typeof ts !== "number") return;
+
+            const temp = val.temperature ?? val.value ?? 0;
+            points.push({
+              timestamp: ts > 1e12 ? ts : ts * 1000, // normalise to ms
+              value: val.value ?? temp,
+              temperature: val.temperature ?? temp,
+              moisture: val.moisture ?? 0,
+              waterLevel: val.waterLevel ?? 0,
+              light: val.light ?? 0,
+            });
           });
+          points.sort((a, b) => a.timestamp - b.timestamp);
           setHistory(points);
         }
       } catch (err) {
@@ -156,13 +172,15 @@ export function useTelemetry(
           lastUpdateRef.current = now;
           setLastUpdated(now);
           setError(null);
-          setIsLoading(false);
-
-          // Only append to history if this is a genuinely new reading
+          setIsLoading(false);          // Only append to history if this is a genuinely new reading
           if (!prevLatestRef.current || telemetry.timestamp > prevLatestRef.current.timestamp) {
             const newPoint: ChartDataPoint = {
               timestamp: now,
               value: telemetry.temperature,
+              temperature: telemetry.temperature,
+              moisture: telemetry.moisture,
+              waterLevel: telemetry.waterLevel,
+              light: telemetry.light,
             };
 
             setHistory((prev) => {
@@ -187,12 +205,10 @@ export function useTelemetry(
                 snap.forEach((child) => {
                   keys.push(child.key!);
                 });
-                if (keys.length > MAX_HISTORY_SIZE + 5) {
+                if (keys.length > PRUNE_THRESHOLD) {
                   const excess = keys.length - MAX_HISTORY_SIZE;
                   const toDelete = keys.slice(0, excess);
-                  toDelete.forEach((k) =>
-                    remove(ref(db, `users/${userId}/devices/${deviceId}/history/${k}`))
-                  );
+                  toDelete.forEach((k) => remove(ref(db, `users/${userId}/devices/${deviceId}/history/${k}`)));
                 }
               });
             }).catch(() => {});

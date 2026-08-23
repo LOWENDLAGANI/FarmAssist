@@ -19,7 +19,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { onValue, push, set, get, remove } from "firebase/database";
+import { onValue, push, set, update, get, remove } from "firebase/database";
 import { sessionsRef, sessionDataRef, sessionRef } from "@/lib/firebaseConfig";
 import type { SensorTelemetry } from "@/types/telemetry";
 
@@ -139,12 +139,9 @@ export function useLoggingSession(userId: string, deviceId: string) {
     if (!active) return;
 
     const dbRef = sessionRef(userId, active.id, deviceId);
-    await set(dbRef, {
-      name: active.name,
-      notes: active.notes,
-      startDate: active.startDate,
+    // Use update() instead of set() to avoid destroying the 'data' child
+    await update(dbRef, {
       endDate: Date.now(),
-      dataCount: active.dataCount,
     }).catch(console.error);
   }, [userId, deviceId]);
 
@@ -152,11 +149,7 @@ export function useLoggingSession(userId: string, deviceId: string) {
   const renameSession = useCallback(
     async (sessionId: string, newName: string) => {
       const dbRef = sessionRef(userId, sessionId, deviceId);
-      const snap = await get(dbRef);
-      if (snap.exists()) {
-        const val = snap.val();
-        await set(dbRef, { ...val, name: newName }).catch(console.error);
-      }
+      await update(dbRef, { name: newName }).catch(console.error);
     },
     [userId, deviceId]
   );
@@ -165,11 +158,7 @@ export function useLoggingSession(userId: string, deviceId: string) {
   const updateNotes = useCallback(
     async (sessionId: string, notes: string) => {
       const dbRef = sessionRef(userId, sessionId, deviceId);
-      const snap = await get(dbRef);
-      if (snap.exists()) {
-        const val = snap.val();
-        await set(dbRef, { ...val, notes }).catch(console.error);
-      }
+      await update(dbRef, { notes }).catch(console.error);
     },
     [userId, deviceId]
   );
@@ -210,6 +199,31 @@ export function useLoggingSession(userId: string, deviceId: string) {
     [userId, deviceId]
   );
 
+  // ── Subscribe to session data (real-time) ─────────────────
+  const subscribeToSessionData = useCallback(
+    (sessionId: string, callback: (data: SessionDataPoint[]) => void): (() => void) => {
+      const dbRef = sessionDataRef(userId, sessionId, deviceId);
+      const unsubscribe = onValue(dbRef, (snap) => {
+        const points: SessionDataPoint[] = [];
+        snap.forEach((child) => {
+          const val = child.val();
+          if (val && typeof val.timestamp === "number") {
+            points.push({
+              timestamp: val.timestamp,
+              temperature: val.temperature ?? 0,
+              moisture: val.moisture ?? 0,
+              waterLevel: val.waterLevel ?? 0,
+              light: val.light ?? 0,
+            });
+          }
+        });
+        callback(points.sort((a, b) => a.timestamp - b.timestamp));
+      });
+      return unsubscribe;
+    },
+    [userId, deviceId]
+  );
+
   // ── Write data point to active session ──────────────────────
   const writeToSession = useCallback(
     async (data: SensorTelemetry) => {
@@ -225,13 +239,12 @@ export function useLoggingSession(userId: string, deviceId: string) {
         light: data.light,
       }).catch(console.error);
 
-      // Update data count
+      // Update data count atomically
       const countRef = sessionRef(userId, active.id, deviceId);
       const snap = await get(countRef);
       if (snap.exists()) {
         const val = snap.val();
-        await set(countRef, {
-          ...val,
+        await update(countRef, {
           dataCount: (val.dataCount ?? 0) + 1,
         }).catch(console.error);
       }
@@ -277,6 +290,7 @@ export function useLoggingSession(userId: string, deviceId: string) {
     updateNotes,
     deleteSession,
     loadSessionData,
+    subscribeToSessionData,
     writeToSession,
     exportSessionCSV,
   };

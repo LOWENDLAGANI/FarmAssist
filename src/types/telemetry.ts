@@ -37,6 +37,11 @@ export interface ChartDataPoint {
   timestamp: number;
   /** The metric value for this snapshot */
   value: number;
+  /** Individual sensor values for per-sensor chart selection */
+  temperature?: number;
+  moisture?: number;
+  waterLevel?: number;
+  light?: number;
 }
 
 /**
@@ -126,10 +131,13 @@ export interface Recommendation {
 }
 
 /** Rolling history buffer max size. */
-export const MAX_HISTORY_SIZE = 15;
+export const MAX_HISTORY_SIZE = 200;
 
 /** Maximum graph history records to retain in RTDB. */
-export const MAX_GRAPH_HISTORY = 100;
+export const MAX_GRAPH_HISTORY = 500;
+
+/** Pruning threshold — start deleting when entries exceed this. */
+export const PRUNE_THRESHOLD = 300;
 
 /** Default stale threshold (ms) before a node is considered offline. */
 export const DEFAULT_STALE_THRESHOLD_MS = 10_000;

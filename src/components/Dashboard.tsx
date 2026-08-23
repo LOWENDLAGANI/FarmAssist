@@ -59,6 +59,7 @@ export default function Dashboard() {
     updateNotes,
     deleteSession,
     loadSessionData,
+    subscribeToSessionData,
     writeToSession,
     exportSessionCSV,
   } = useLoggingSession(userId, deviceId);
@@ -206,6 +207,7 @@ export default function Dashboard() {
               onUpdateNotes={updateNotes}
               onDeleteSession={deleteSession}
               onLoadSessionData={loadSessionData}
+              onSubscribeSessionData={subscribeToSessionData}
               onExportCSV={exportSessionCSV}
             />
           )}

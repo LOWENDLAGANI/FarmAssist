@@ -16,7 +16,7 @@
 
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Play,
   Square,
@@ -48,6 +48,7 @@ interface HistoryPageProps {
   onUpdateNotes: (id: string, notes: string) => void;
   onDeleteSession: (id: string) => void;
   onLoadSessionData: (id: string) => Promise<SessionDataPoint[]>;
+  onSubscribeSessionData: (id: string, callback: (data: SessionDataPoint[]) => void) => () => void;
   onExportCSV: (id: string, name: string) => void;
 }
 
@@ -82,6 +83,7 @@ export default function HistoryPage({
   onUpdateNotes,
   onDeleteSession,
   onLoadSessionData,
+  onSubscribeSessionData,
   onExportCSV,
 }: HistoryPageProps) {
   const [viewingSessionId, setViewingSessionId] = useState<string | null>(null);
@@ -103,27 +105,57 @@ export default function HistoryPage({
 
   // ── View session data ────────────────────────────────────────
   const handleViewSession = useCallback(
-    async (sessionId: string) => {
+    (sessionId: string) => {
       if (viewingSessionId === sessionId) {
         setViewingSessionId(null);
         setViewingData([]);
         return;
       }
-
-      setLoadingData(true);
       setViewingSessionId(sessionId);
-
-      try {
-        const data = await onLoadSessionData(sessionId);
-        setViewingData(data);
-      } catch (err) {
-        console.error("Failed to load session data:", err);
-      } finally {
-        setLoadingData(false);
-      }
+      setLoadingData(true);
     },
-    [viewingSessionId, onLoadSessionData]
+    [viewingSessionId]
   );
+
+  // ── Derive whether the viewed session is still active ──────
+  const viewedSession = useMemo(
+    () => sessions.find((s) => s.id === viewingSessionId) ?? null,
+    [sessions, viewingSessionId]
+  );
+  const isViewingActive = viewedSession?.endDate === null;
+
+  // ── Real-time data for active sessions / one-shot for completed ─
+  useEffect(() => {
+    if (!viewingSessionId) {
+      setLoadingData(false);
+      return;
+    }
+
+    if (isViewingActive) {
+      // Active session: subscribe to real-time updates
+      setLoadingData(true);
+      const unsubscribe = onSubscribeSessionData(viewingSessionId, (data) => {
+        setViewingData(data);
+        setLoadingData(false);
+      });
+      return () => unsubscribe();
+    }
+
+    if (isViewingActive === false) {
+      // Completed session: one-shot load
+      setLoadingData(true);
+      let cancelled = false;
+      onLoadSessionData(viewingSessionId)
+        .then((data) => {
+          if (!cancelled) {
+            setViewingData(data);
+            setLoadingData(false);
+          }
+        })
+        .catch(console.error);
+      return () => { cancelled = true; };
+    }
+  }, [viewingSessionId, isViewingActive, onSubscribeSessionData, onLoadSessionData]);
 
   // ── Convert session data to chart format ─────────────────────
   const viewingChartData: ChartDataPoint[] = useMemo(() => {

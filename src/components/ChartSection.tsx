@@ -56,9 +56,18 @@ export default function ChartSection({
   const chartData = useMemo(() => {
     return history.map((point) => ({
       timestamp: point.timestamp,
-      value: point.value,
+      value:
+        activeSensor === "temperature"
+          ? (point.temperature ?? point.value)
+          : activeSensor === "moisture"
+            ? (point.moisture ?? point.value)
+            : activeSensor === "waterLevel"
+              ? (point.waterLevel ?? point.value)
+              : activeSensor === "light"
+                ? (point.light ?? point.value)
+                : point.value,
     }));
-  }, [history]);
+  }, [history, activeSensor]);
 
   const hasData = chartData.length > 1;
 

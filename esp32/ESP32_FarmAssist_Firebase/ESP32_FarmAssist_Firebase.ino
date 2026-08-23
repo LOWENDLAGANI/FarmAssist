@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <Firebase_ESP_Client.h>  // Official Firebase ESP Client library
-#include <DHT.h>                  // Adafruit DHT sensor library (install "DHT sensor library" + "Adafruit Unified Sensor" via Library Manager)
-#include <time.h>                 // For NTP time sync
+#include <DHT.h>                 // Adafruit DHT sensor library (install "DHT sensor library" + "Adafruit Unified Sensor" via Library Manager)
+#include <time.h>                // For NTP time sync
 
 // Helper functions for token generation and debug info
 #include "addons/TokenHelper.h"
@@ -15,15 +15,17 @@
 #define API_KEY "AIzaSyAlLaKUR4q8CZTMFlAFRTM-ToncomN4Ugs"
 #define DATABASE_URL "https://farmassist-2425-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
-// ──────────────── Device & User Identity ────────────────
-// DEVICE_ID: The ID the user types into the dashboard's Settings > Pair Device
-// USER_UID:  Copy from Settings > Your User ID in the dashboard
-//            This ensures the ESP32 writes to YOUR personal database path.
-#define DEVICE_ID "esp32-farm-001"
-#define USER_UID  "PASTE_YOUR_USER_UID_HERE"
+// ---------------- User & Device Identity ----------------
+// USER_UID must match the Firebase Auth UID shown on the dashboard's
+// Settings page — copy it there before flashing, or the ESP32 will be
+// writing to a path the dashboard never reads from.
+#define USER_UID "tsYo3zKfr8SSowOE23lPQe8Kb0v2"
 
-// Firebase database paths (user-scoped)
-String LATEST_PATH = "/users/" + String(USER_UID) + "/devices/" + String(DEVICE_ID) + "/latest";
+// DEVICE_ID lets you run multiple sensor units under the same user account.
+#define DEVICE_ID "esp32-farm-001"
+
+// Firebase database paths, built from USER_UID + DEVICE_ID
+String LATEST_PATH  = "/users/" + String(USER_UID) + "/devices/" + String(DEVICE_ID) + "/latest";
 String HISTORY_BASE = "/users/" + String(USER_UID) + "/devices/" + String(DEVICE_ID) + "/history";
 
 // Firebase objects
@@ -32,18 +34,20 @@ FirebaseAuth auth;
 FirebaseConfig config;
 
 // ---------------- NTP Time Sync ----------------
-const long gmtOffset_sec = 8 * 3600;  // Malaysia = UTC+8
-const int daylightOffset_sec = 0;
+const long  gmtOffset_sec = 8 * 3600;   // Malaysia = UTC+8
+const int   daylightOffset_sec = 0;
 const char* ntpServer1 = "pool.ntp.org";
 const char* ntpServer2 = "time.nist.gov";
 bool timeSynced = false;
 
 // ---------------- Timing ----------------
-const unsigned long SAMPLE_INTERVAL_MS = 5000;    // 5 seconds - sample + /users/{uid}/devices/{id}/latest write
-const unsigned long HISTORY_INTERVAL_MS = 60000;  // 1 minute - /users/{uid}/devices/{id}/history write
+const unsigned long SAMPLE_INTERVAL_MS = 5000;      // 5 seconds - sample + latest write
+const unsigned long HISTORY_INTERVAL_MS = 60000;    // 1 minute - history write
+const unsigned long WIFI_CHECK_INTERVAL_MS = 15000; // 15 seconds - WiFi watchdog
 
 unsigned long sampleprevMillis = 0;
 unsigned long historyPrevMillis = 0;
+unsigned long lastWifiCheck = 0;
 unsigned long sampleCount = 0;   // total samples taken since boot
 unsigned long historyCount = 0;  // total history writes since boot
 bool signUpOk = false;
@@ -124,16 +128,17 @@ void setup() {
   delay(500);
   Serial.println("\n\n===============================================");
   Serial.println("  FarmAssist ESP32 - Booting");
-  Serial.println("  Device ID : " + String(DEVICE_ID));
   Serial.println("  User UID  : " + String(USER_UID));
+  Serial.println("  Device ID : " + String(DEVICE_ID));
   Serial.println("  Data path : " + LATEST_PATH);
   Serial.println("===============================================");
 
-  // Check that USER_UID has been configured
-  if (String(USER_UID) == "PASTE_YOUR_USER_UID_HERE") {
-    Serial.println("\n*** WARNING: USER_UID not configured! ***");
-    Serial.println("*** Copy your UID from the dashboard Settings ***");
-    Serial.println("*** and paste it in the USER_UID #define. ***\n");
+  // Safety check — refuse to run with a placeholder UID so you don't
+  // accidentally write data nobody's dashboard will ever see.
+  if (String(USER_UID) == "PASTE_YOUR_FIREBASE_UID_HERE") {
+    Serial.println("[FATAL] USER_UID not set! Copy your UID from the dashboard's Settings page.");
+    Serial.println("        Halting.");
+    while (true) delay(1000);
   }
 
   dht.begin();
@@ -158,8 +163,9 @@ void setup() {
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
 
-  // Anonymous sign-in — matches the dashboard's security model where
-  // the ESP32 doesn't need a Google account, just any authenticated write.
+  // Anonymous sign-in — the ESP32 doesn't need a Google account.
+  // Data isolation comes from USER_UID being baked into the write path,
+  // matching the dashboard's security model.
   if (Firebase.signUp(&config, &auth, "", "")) {
     Serial.println("[Firebase] Anonymous sign-in OK");
     signUpOk = true;
@@ -175,8 +181,8 @@ void setup() {
 
   Serial.println("===============================================");
   Serial.println("  Setup complete.");
-  Serial.println("  " + LATEST_PATH + " -> updated every " + String(SAMPLE_INTERVAL_MS / 1000) + "s");
-  Serial.println("  " + HISTORY_BASE + " -> logged every " + String(HISTORY_INTERVAL_MS / 1000) + "s");
+  Serial.println("  " + LATEST_PATH  + " -> updated every " + String(SAMPLE_INTERVAL_MS / 1000) + "s");
+  Serial.println("  " + HISTORY_BASE + " -> logged every "  + String(HISTORY_INTERVAL_MS / 1000) + "s");
   Serial.println("===============================================\n");
 }
 
@@ -189,15 +195,15 @@ float placeholderWave(float minVal, float maxVal, unsigned long periodMs, float 
   return minVal + normalized * (maxVal - minVal);
 }
 
-// Runs every 5 seconds: reads sensors AND writes /users/{uid}/devices/{id}/latest to Firebase
+// Runs every 5 seconds: reads sensors AND writes .../latest to Firebase
 void sampleSensors() {
   sampleCount++;
 
   if (USE_PLACEHOLDER_DATA) {
-    moistureVal = (int)placeholderWave(20, 80, 60000, 0.0);
+    moistureVal    = (int)placeholderWave(20, 80, 60000, 0.0);
     temperatureVal = placeholderWave(22.0, 34.0, 90000, 1.0);
-    waterLevelVal = (int)placeholderWave(10, 100, 45000, 2.0);
-    lightVal = (int)placeholderWave(0, 100, 30000, 3.0);
+    waterLevelVal  = (int)placeholderWave(10, 100, 45000, 2.0);
+    lightVal       = (int)placeholderWave(0, 100, 30000, 3.0);
   } else {
     soilVal = analogRead(soilPin);
     moistureVal = constrain(map(soilVal, drySoil, wetSoil, 0, 100), 0, 100);
@@ -216,9 +222,12 @@ void sampleSensors() {
   }
 
   unsigned long msUntilNextHistory = HISTORY_INTERVAL_MS - (millis() - historyPrevMillis);
-  Serial.println(nowPrefix() + "[Sample #" + String(sampleCount) + "] Moisture=" + String(moistureVal) + "% Temp=" + String(temperatureVal, 1) + "C Water=" + String(waterLevelVal) + "% Light=" + String(lightVal) + "%  (next history write in " + String(msUntilNextHistory / 1000) + "s)");
+  Serial.println(nowPrefix() + "[Sample #" + String(sampleCount) + "] Moisture=" + String(moistureVal) +
+                  "% Temp=" + String(temperatureVal, 1) + "C Water=" + String(waterLevelVal) +
+                  "% Light=" + String(lightVal) + "%  (next history write in " +
+                  String(msUntilNextHistory / 1000) + "s)");
 
-  // ---- Write /users/{uid}/devices/{id}/latest every 5 seconds ----
+  // ---- Write .../latest every 5 seconds ----
   if (Firebase.ready() && signUpOk) {
     time_t now;
     struct tm timeinfo;
@@ -249,7 +258,7 @@ void sampleSensors() {
   }
 }
 
-// Runs every 60 seconds: writes one entry under /users/{uid}/devices/{id}/history
+// Runs every 60 seconds: writes one entry under .../history
 void saveHistoryToFirebase() {
   historyCount++;
   Serial.println("-----------------------------------------------");
@@ -290,11 +299,15 @@ void saveHistoryToFirebase() {
   json.set("temperature", temperatureVal);
   json.set("waterLevel", waterLevelVal);
   json.set("light", lightVal);
+  json.set("value", temperatureVal);  // 'value' for chart compat
+  json.set("timestamp", (double)now * 1000.0);  // ms epoch (matches frontend)
   json.set("timestamp_epoch", (double)now);
   json.set("timestamp_str", timeStr);
 
   Serial.println(nowPrefix() + "[History] Writing to: " + basePath);
-  Serial.println(nowPrefix() + "[History]   Moisture=" + String(moistureVal) + "% Temp=" + String(temperatureVal, 1) + "C Water=" + String(waterLevelVal) + "% Light=" + String(lightVal) + "%");
+  Serial.println(nowPrefix() + "[History]   Moisture=" + String(moistureVal) +
+                  "% Temp=" + String(temperatureVal, 1) + "C Water=" + String(waterLevelVal) +
+                  "% Light=" + String(lightVal) + "%");
 
   if (Firebase.RTDB.setJSON(&fbdo, basePath.c_str(), &json)) {
     Serial.println(nowPrefix() + "[History] SUCCESS - saved at " + String(timeStr));
@@ -302,29 +315,29 @@ void saveHistoryToFirebase() {
     Serial.println(nowPrefix() + "[History] FAILED - reason: " + fbdo.errorReason());
   }
 
-  Serial.println(nowPrefix() + "[Status] WiFi RSSI: " + String(WiFi.RSSI()) + " dBm | Free heap: " + String(ESP.getFreeHeap()) + " bytes");
+  Serial.println(nowPrefix() + "[Status] WiFi RSSI: " + String(WiFi.RSSI()) +
+                  " dBm | Free heap: " + String(ESP.getFreeHeap()) + " bytes");
   Serial.println("-----------------------------------------------\n");
 }
 
 void loop() {
   unsigned long now = millis();
 
-  // Periodic WiFi watchdog message so you know it's alive even between events
-  static unsigned long lastWifiCheck = 0;
-  if (now - lastWifiCheck > 15000) {
+  // ---- Every 15 seconds: WiFi watchdog ----
+  if (now - lastWifiCheck > WIFI_CHECK_INTERVAL_MS) {
     lastWifiCheck = now;
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println(nowPrefix() + "[WiFi] WARNING: disconnected, attempting reconnect...");
     }
   }
 
-  // ---- Every 5 seconds: sample sensors + write /users/{uid}/devices/{id}/latest ----
+  // ---- Every 5 seconds: sample sensors + write .../latest ----
   if (now - sampleprevMillis > SAMPLE_INTERVAL_MS || sampleprevMillis == 0) {
     sampleprevMillis = now;
     sampleSensors();
   }
 
-  // ---- Every 1 minute: write one entry to /users/{uid}/devices/{id}/history ----
+  // ---- Every 1 minute: write one entry to .../history ----
   if (now - historyPrevMillis > HISTORY_INTERVAL_MS || historyPrevMillis == 0) {
     historyPrevMillis = now;
     saveHistoryToFirebase();
