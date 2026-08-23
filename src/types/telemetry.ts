@@ -139,5 +139,8 @@ export const MAX_GRAPH_HISTORY = 500;
 /** Pruning threshold — start deleting when entries exceed this. */
 export const PRUNE_THRESHOLD = 300;
 
-/** Default stale threshold (ms) before a node is considered offline. */
-export const DEFAULT_STALE_THRESHOLD_MS = 10_000;
+/**
+ * Allow a few missed ESP32 samples (normally sent every 5 seconds) before
+ * showing "Not Responding". A device becomes offline after three times this.
+ */
+export const DEFAULT_STALE_THRESHOLD_MS = 20_000;
