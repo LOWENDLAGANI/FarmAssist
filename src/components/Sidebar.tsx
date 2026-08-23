@@ -40,7 +40,7 @@ interface SidebarProps {
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
   return (
-    <aside className="flex h-full w-16 flex-col items-center border-r border-cyan-900/30 bg-[#0a1628] py-4 md:w-20">
+    <aside className="hidden h-full w-16 shrink-0 flex-col items-center border-r border-cyan-900/30 bg-[#0a1628] py-4 md:flex md:w-20">
       {/* ── Logo ── */}
       <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400">
         <Leaf className="h-5 w-5" />
@@ -54,8 +54,11 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
           return (
             <button
               key={item.id}
+              type="button"
               onClick={() => onNavigate(item.id)}
               title={item.label}
+              aria-label={item.label}
+              aria-current={isActive ? "page" : undefined}
               className={`group relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200 ${
                 isActive
                   ? "bg-cyan-500/20 text-cyan-400"
