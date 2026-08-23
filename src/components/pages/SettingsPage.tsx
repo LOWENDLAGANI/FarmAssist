@@ -10,8 +10,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Sun,
-  Moon,
   Database,
   Wifi,
   Cpu,
@@ -251,7 +249,7 @@ export default function SettingsPage({
   userUID,
   onCreateNotification,
 }: SettingsPageProps) {
-  const { theme, toggleTheme } = useAppTheme();
+  const { theme, setTheme, themes } = useAppTheme();
   const { registerDevice, forceRegisterDevice, unlinkDevice, status: deviceLinkStatus, registryInfo } = useDeviceValidation(userUID, deviceId);
   const [deviceInput, setDeviceInput] = useState(deviceId);
   const [saved, setSaved] = useState(false);
@@ -356,22 +354,22 @@ export default function SettingsPage({
     }
   };
 
-  const handleTestNotification = async () => {
-    // Write to notification center
-    await onCreateNotification(
-      userUID,
-      "sensor_alert",
-      "Test Notification",
-      `This is a test notification for Rover "${deviceId}". If you see this, notifications are working!`,
-      deviceId
-    );
-    // Also fire a browser notification if permission granted
+  const handleTestNotification = () => {
+    // Fire browser notification FIRST — must be synchronous in the click gesture
     if (Notification.permission === "granted") {
       new Notification("FarmAssist Test", {
         body: `Notifications are working for Rover "${deviceId}"!`,
         icon: "/favicon.ico",
       });
     }
+    // Then write to notification center (fire-and-forget)
+    onCreateNotification(
+      userUID,
+      "sensor_alert",
+      "Test Notification",
+      `This is a test notification for Rover "${deviceId}". If you see this, notifications are working!`,
+      deviceId
+    );
   };
 
   return (
@@ -775,23 +773,33 @@ export default function SettingsPage({
           <h3 className="mb-3 text-sm font-semibold text-white">
             Appearance
           </h3>
-          <button
-            onClick={toggleTheme}
-            className="flex w-full items-center gap-3 rounded-xl border border-cyan-900/20 bg-[#0a1628] p-4 transition-colors hover:bg-[#0f2240]"
-          >
-            {theme === "dark" ? (
-              <Moon className="h-5 w-5 text-cyan-400" />
-            ) : (
-              <Sun className="h-5 w-5 text-yellow-400" />
-            )}
-            <div className="flex-1 text-left">
-              <p className="text-sm font-medium text-slate-200">Theme</p>
-              <p className="text-xs text-slate-500">
-                Currently: {theme === "dark" ? "Dark" : "Light"}
-              </p>
-            </div>
-            <RefreshCw className="h-4 w-4 text-slate-500" />
-          </button>
+          <p className="mb-3 text-xs text-slate-400">
+            Choose a theme that suits your preference
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {themes.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                className={`flex flex-col items-center gap-1 rounded-xl border p-3 transition-all ${
+                  theme === t.id
+                    ? "border-cyan-500/50 bg-cyan-500/10 shadow-lg shadow-cyan-500/10"
+                    : "border-cyan-900/20 bg-[#0a1628] hover:border-cyan-800/30 hover:bg-[#0f2240]"
+                }`}
+              >
+                <span className="text-xl">{t.icon}</span>
+                <span className={`text-xs font-medium ${theme === t.id ? "text-cyan-400" : "text-slate-300"}`}>
+                  {t.name}
+                </span>
+                {theme === t.id && (
+                  <span className="mt-1 flex items-center gap-1 text-[10px] text-cyan-400">
+                    <RefreshCw className="h-2.5 w-2.5" />
+                    Active
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Notifications */}

@@ -11,7 +11,7 @@ firebase.initializeApp({
   projectId: "farmassist-2425",
   storageBucket: "farmassist-2425.firebasestorage.app",
   messagingSenderId: "266165512232",
-  appId: "1:266165512232:web:d3ff69e3e770a5e616d1d",
+  appId: "1:266165512232:web:d3ff699e3e770a5e616d1d",
 });
 
 const messaging = firebase.messaging();

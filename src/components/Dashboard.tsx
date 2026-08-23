@@ -35,7 +35,7 @@ import RecommendationPanel from "./RecommendationPanel";
 import ErrorDialog from "./ErrorDialog";
 import DeviceMismatchBanner from "./DeviceMismatchBanner";
 import OwnershipDeniedOverlay from "./OwnershipDeniedOverlay";
-import SensorsPage from "./pages/SensorsPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import CameraPage from "./pages/CameraPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -262,9 +262,14 @@ export default function Dashboard() {
             </>
           )}
 
-          {/* ── Sensors page ── */}
-          {activePage === "sensors" && (
-            <SensorsPage latest={latest} sensorRanges={ranges} />
+          {/* ── Notifications page ── */}
+          {activePage === "notifications" && (
+            <NotificationsPage
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onMarkRead={(id) => markRead(userId, id)}
+              onMarkAllRead={() => markAllRead(userId)}
+            />
           )}
 
           {/* ── Camera page ── */}

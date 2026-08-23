@@ -10,7 +10,7 @@
 
 import {
   LayoutDashboard,
-  Activity,
+  Bell,
   Camera,
   Clock,
   Settings,
@@ -25,7 +25,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { icon: LayoutDashboard, label: "Home", id: "dashboard" },
-  { icon: Activity, label: "Sensors", id: "sensors" },
+  { icon: Bell, label: "Alerts", id: "notifications" },
   { icon: Camera, label: "Camera", id: "camera" },
   { icon: Clock, label: "History", id: "history" },
   { icon: Settings, label: "Settings", id: "settings" },

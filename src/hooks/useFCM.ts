@@ -83,13 +83,23 @@ export function useFCM(userId: string): FCMState {
       setIsLoading(true);
 
       try {
+        console.log("[useFCM] Requesting notification permission...");
         const result = await Notification.requestPermission();
+        console.log("[useFCM] Permission result:", result);
         setPermissionState(result);
 
         if (result === "granted") {
-          const fcmToken = await getToken(messaging, {
-            vapidKey: process.env.NEXT_PUBLIC_FCM_VAPID_KEY,
-          });
+          const vapidKey = process.env.NEXT_PUBLIC_FCM_VAPID_KEY;
+          console.log("[useFCM] VAPID key present:", !!vapidKey);
+          console.log("[useFCM] Messaging instance:", !!messaging);
+
+          if (!vapidKey) {
+            console.error("[useFCM] NEXT_PUBLIC_FCM_VAPID_KEY is not set!");
+            return;
+          }
+
+          const fcmToken = await getToken(messaging, { vapidKey });
+          console.log("[useFCM] FCM token obtained:", !!fcmToken);
 
           if (fcmToken) {
             setToken(fcmToken);
@@ -99,10 +109,11 @@ export function useFCM(userId: string): FCMState {
               createdAt: Date.now(),
               userAgent: navigator.userAgent.slice(0, 200),
             });
+            console.log("[useFCM] Token stored in RTDB for user:", uid);
           }
         }
       } catch (err) {
-        console.error("[useFCM] Failed to get token:", err);
+        console.error("[useFCM] Failed:", err);
       } finally {
         setIsLoading(false);
       }
