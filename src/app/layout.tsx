@@ -2,7 +2,7 @@
  * layout.tsx
  * ─────────────────────────────────────────────────────────────────
  * Root layout for FarmAssist IoT Dashboard.
- * Wraps children in ThemeProvider for global dark/light mode support.
+ * Wraps children in ThemeProvider + AuthProvider.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -10,6 +10,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
+import AuthProvider from "@/components/AuthProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,7 +25,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "FarmAssist",
   description:
-    "Real-time IoT dashboard for monitoring temperature, humidity, soil moisture, and water level sensors via Firebase.",
+    "Real-time IoT dashboard for monitoring temperature, soil moisture, water level, and light sensors via Firebase.",
 };
 
 export default function RootLayout({
@@ -35,11 +36,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="h-screen overflow-hidden">
-        <ThemeProvider>{children}</ThemeProvider>
+        <AuthProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );

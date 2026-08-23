@@ -3,6 +3,7 @@
  * ─────────────────────────────────────────────────────────────────
  * Detailed sensor view with large gauges and live readings.
  * Shows all sensors in a grid with expanded info.
+ * Uses user-configurable optimal ranges from RTDB.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -11,14 +12,16 @@
 import CircularGauge from "../CircularGauge";
 import type { SensorTelemetry } from "@/types/telemetry";
 import { SENSOR_META, type SensorKey } from "@/types/telemetry";
+import type { SensorRanges } from "@/hooks/useSensorRanges";
 
 interface SensorsPageProps {
   latest: SensorTelemetry | null;
+  sensorRanges?: SensorRanges;
 }
 
 const SENSORS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light"];
 
-export default function SensorsPage({ latest }: SensorsPageProps) {
+export default function SensorsPage({ latest, sensorRanges }: SensorsPageProps) {
   return (
     <div>
       <div className="mb-6">
@@ -30,6 +33,9 @@ export default function SensorsPage({ latest }: SensorsPageProps) {
         {SENSORS.map((key) => {
           const meta = SENSOR_META[key];
           const value = latest ? latest[key] : null;
+          const range = sensorRanges?.[key];
+          const optimalMin = range?.optimalMin ?? meta.optimalRange[0];
+          const optimalMax = range?.optimalMax ?? meta.optimalRange[1];
 
           return (
             <div
@@ -57,7 +63,7 @@ export default function SensorsPage({ latest }: SensorsPageProps) {
                 <div className="flex justify-between text-xs text-slate-400">
                   <span>Optimal Range</span>
                   <span className="text-slate-300">
-                    {meta.optimalRange[0]}–{meta.optimalRange[1]} {meta.unit}
+                    {optimalMin}–{optimalMax} {meta.unit}
                   </span>
                 </div>
                 <div className="mt-1 flex justify-between text-xs text-slate-400">

@@ -6,13 +6,16 @@
  *
  * No AI model or external API call — rules are deterministic
  * thresholds derived from agronomy best-practice ranges.
+ *
+ * Supports user-configurable thresholds via the SensorRanges parameter.
  * ─────────────────────────────────────────────────────────────────
  */
 
 import type { SensorTelemetry, SensorKey, Recommendation } from "@/types/telemetry";
+import type { SensorRanges } from "@/hooks/useSensorRanges";
 
-// ── Threshold constants ───────────────────────────────────────────
-const THRESHOLDS = {
+// ── Default threshold constants (fallback if no user config) ─────
+const DEFAULT_THRESHOLDS = {
   temperature: {
     low: 5,      // Below 5°C — frost risk
     high: 32,    // Above 32°C — heat stress
@@ -50,15 +53,47 @@ function makeRec(
 }
 
 /**
+ * Builds threshold config from user-configurable ranges.
+ * The user configures "optimal" range; we derive warning/critical
+ * thresholds from those values (anything outside optimal = warning).
+ */
+function buildThresholds(ranges?: SensorRanges) {
+  if (!ranges) return DEFAULT_THRESHOLDS;
+
+  return {
+    temperature: {
+      low: ranges.temperature.optimalMin - 13, // ~5°C default
+      high: ranges.temperature.optimalMax + 2,  // ~32°C default
+      critical: ranges.temperature.optimalMax + 8, // ~38°C default
+    },
+    light: {
+      low: ranges.light.optimalMin > 500 ? ranges.light.optimalMin : 500,
+      high: ranges.light.optimalMax < 9000 ? ranges.light.optimalMax : 9000,
+    },
+    moisture: {
+      low: ranges.moisture.optimalMin,
+      high: ranges.moisture.optimalMax + 20,
+    },
+    waterLevel: {
+      low: ranges.waterLevel.optimalMin > 15 ? ranges.waterLevel.optimalMin : 15,
+      critical: 5,
+    },
+  };
+}
+
+/**
  * Evaluates the latest telemetry snapshot against the threshold
  * rules and returns an array of actionable recommendations.
  *
- * @param data - The most recent sensor reading from RTDB
- * @returns    - Array of recommendations (may be empty if all readings are optimal)
+ * @param data   - The most recent sensor reading from RTDB
+ * @param ranges - Optional user-configurable ranges from Firebase
+ * @returns      - Array of recommendations (may be empty if all readings are optimal)
  */
 export function generateRecommendations(
-  data: SensorTelemetry
+  data: SensorTelemetry,
+  ranges?: SensorRanges
 ): Recommendation[] {
+  const THRESHOLDS = buildThresholds(ranges);
   const recs: Recommendation[] = [];
   const t = data.temperature;
   const l = data.light;

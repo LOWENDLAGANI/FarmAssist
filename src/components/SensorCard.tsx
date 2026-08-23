@@ -2,16 +2,17 @@
  * SensorCard.tsx
  * ─────────────────────────────────────────────────────────────────
  * Sensor metric card with circular gauge display.
- * Dark theme matching the Farm Assistant reference UI.
+ * Dark theme matching the FarmAssist reference UI.
  *
  * Each card shows:
  *  • Sensor label at top
  *  • Circular arc gauge with value and unit
- *  • Status text (Good / Optimal / Warning)
- *  • Optimal range text
+ *  • Status text (Good / Warning)
+ *  • Optimal range text (user-configurable)
  *
  * Props:
  *  • compact — smaller gauge for mobile screens
+ *  • range — configurable optimal range from RTDB
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -21,6 +22,7 @@ import { useMemo } from "react";
 import CircularGauge from "./CircularGauge";
 import type { SensorKey } from "@/types/telemetry";
 import { SENSOR_META } from "@/types/telemetry";
+import type { SensorRange } from "@/hooks/useSensorRanges";
 
 interface SensorCardProps {
   sensorKey: SensorKey;
@@ -29,6 +31,8 @@ interface SensorCardProps {
   onSelect: (key: SensorKey) => void;
   /** Use smaller gauge for mobile */
   compact?: boolean;
+  /** User-configurable optimal range */
+  range?: SensorRange;
 }
 
 export default function SensorCard({
@@ -37,14 +41,19 @@ export default function SensorCard({
   isSelected,
   onSelect,
   compact = false,
+  range,
 }: SensorCardProps) {
   const meta = SENSOR_META[sensorKey];
+
+  // Use configured range or fall back to defaults from SENSOR_META
+  const optimalMin = range?.optimalMin ?? meta.optimalRange[0];
+  const optimalMax = range?.optimalMax ?? meta.optimalRange[1];
 
   /** Whether the current value is within the optimal range. */
   const isOptimal = useMemo(() => {
     if (value === null) return false;
-    return value >= meta.optimalRange[0] && value <= meta.optimalRange[1];
-  }, [value, meta]);
+    return value >= optimalMin && value <= optimalMax;
+  }, [value, optimalMin, optimalMax]);
 
   /** Status label based on range check. */
   const statusText = useMemo(() => {
@@ -95,8 +104,8 @@ export default function SensorCard({
 
       {/* ── Optimal Range ── */}
       <span className="mt-0.5 text-[10px] text-slate-500 sm:mt-1 sm:text-xs">
-        Range {meta.optimalRange[0]}–
-        {meta.optimalRange[1]}
+        Range {optimalMin}–
+        {optimalMax}
         {meta.unit}
       </span>
     </button>

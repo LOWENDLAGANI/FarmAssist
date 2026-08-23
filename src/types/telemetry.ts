@@ -77,7 +77,7 @@ export const SENSOR_META: Record<SensorKey, SensorMeta> = {
     icon: "Thermometer",
     color: "text-orange-500",
     hexColor: "#f97316",
-    min: -10,
+    min: 0,
     max: 60,
     optimalRange: [18, 30],
   },

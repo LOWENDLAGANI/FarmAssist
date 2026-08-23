@@ -6,13 +6,19 @@
  * Layout:
  *  • Desktop (≥768px): Left sidebar + top bar + content
  *  • Mobile (<768px): Top bar + content + bottom tab bar
+ *
+ * All data is scoped per-user via Firebase Auth UID.
  * ─────────────────────────────────────────────────────────────────
  */
 
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useAuth } from "./AuthProvider";
 import { useTelemetry } from "@/hooks/useTelemetry";
+import { useDeviceId } from "@/hooks/useDeviceId";
+import { useSensorRanges } from "@/hooks/useSensorRanges";
+import { useLoggingSession } from "@/hooks/useLoggingSession";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { SensorKey } from "@/types/telemetry";
 import { generateRecommendations } from "@/lib/recommendations";
@@ -22,6 +28,7 @@ import BottomNav from "./BottomNav";
 import SensorCard from "./SensorCard";
 import ChartSection from "./ChartSection";
 import RecommendationPanel from "./RecommendationPanel";
+import ErrorDialog from "./ErrorDialog";
 import SensorsPage from "./pages/SensorsPage";
 import CameraPage from "./pages/CameraPage";
 import HistoryPage from "./pages/HistoryPage";
@@ -32,15 +39,50 @@ const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "ligh
 
 export default function Dashboard() {
   const isMobile = useIsMobile();
+  const { user } = useAuth();
+  const userId = user?.uid ?? "";
 
   // ── Navigation state ──────────────────────────────────────
   const [activePage, setActivePage] = useState("dashboard");
 
-  // ── Real-time telemetry from Firebase ───────────────────────
-  // chartHistory is persisted to sensor/history in RTDB and
-  // reloaded automatically on mount.
+  // ── Device pairing ────────────────────────────────────────
+  const { deviceId, setDevice } = useDeviceId();
+
+  // ── Logging session management (user-scoped) ──────────────
+  const {
+    sessions,
+    activeSession,
+    isLoading: sessionsLoading,
+    startSession,
+    stopSession,
+    renameSession,
+    updateNotes,
+    deleteSession,
+    loadSessionData,
+    writeToSession,
+    exportSessionCSV,
+  } = useLoggingSession(userId, deviceId);
+
+  // ── Real-time telemetry from Firebase (user-scoped) ─────────
+  // Pass writeToSession as callback — called on every new reading
+  // when a session is active
   const { latest, chartHistory, isLoading, status, error, lastUpdated } =
-    useTelemetry();
+    useTelemetry(
+      userId,
+      deviceId,
+      undefined,
+      activeSession ? writeToSession : undefined
+    );
+
+  // ── User-configurable sensor ranges (user-scoped) ─────────
+  const {
+    ranges,
+    updateRanges,
+    resetToDefaults: resetRanges,
+  } = useSensorRanges(userId, deviceId);
+
+  // ── Error dialog state ─────────────────────────────────────
+  const [showError, setShowError] = useState(false);
 
   // ── Active sensor selection ────────────────────────────────
   const [activeSensor, setActiveSensor] = useState<SensorKey>("temperature");
@@ -49,11 +91,11 @@ export default function Dashboard() {
     setActiveSensor(key);
   }, []);
 
-  // ── Recommendations ──────────────────────────────────────
+  // ── Recommendations (uses configurable ranges) ─────────────
   const recommendations = useMemo(() => {
     if (!latest) return [];
-    return generateRecommendations(latest);
-  }, [latest]);
+    return generateRecommendations(latest, ranges);
+  }, [latest, ranges]);
 
   // ── Sensor values map for cards ──────────────────────────
   const sensorValues = useMemo(() => {
@@ -82,7 +124,7 @@ export default function Dashboard() {
       {/* ── Main content area ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* ── Top Bar ── */}
-        <TopBar status={status} lastUpdated={lastUpdated} />
+        <TopBar status={status} lastUpdated={lastUpdated} deviceId={deviceId} />
 
         {/* ── Scrollable content ── */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
@@ -91,16 +133,27 @@ export default function Dashboard() {
             <div className="mb-4 flex items-center gap-2 rounded-xl border border-cyan-900/30 bg-[#0c1a2e] p-3 sm:mb-6 sm:p-4">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
               <span className="text-sm text-slate-400">
-                Connecting to Firebase…
+                Connecting to device…
               </span>
             </div>
           )}
 
-          {/* Error state */}
+          {/* Error state — banner for minor, dialog for critical */}
           {error && (
-            <div className="mb-4 rounded-xl border border-red-800/40 bg-red-950/30 p-3 sm:mb-6 sm:p-4">
-              <p className="text-sm text-red-400">{error}</p>
-            </div>
+            <>
+              <div
+                onClick={() => setShowError(true)}
+                className="mb-4 cursor-pointer rounded-xl border border-red-800/40 bg-red-950/30 p-3 transition-colors hover:border-red-600/50 sm:mb-6 sm:p-4"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-red-400 flex-1">{error}</span>
+                  <span className="text-[10px] text-red-500 shrink-0">Click for details</span>
+                </div>
+              </div>
+              {showError && (
+                <ErrorDialog error={error} onClose={() => setShowError(false)} />
+              )}
+            </>
           )}
 
           {/* ── Dashboard page ── */}
@@ -115,6 +168,7 @@ export default function Dashboard() {
                     isSelected={activeSensor === key}
                     onSelect={handleSelectSensor}
                     compact={isMobile}
+                    range={ranges[key]}
                   />
                 ))}
               </div>
@@ -132,7 +186,7 @@ export default function Dashboard() {
 
           {/* ── Sensors page ── */}
           {activePage === "sensors" && (
-            <SensorsPage latest={latest} />
+            <SensorsPage latest={latest} sensorRanges={ranges} />
           )}
 
           {/* ── Camera page ── */}
@@ -142,12 +196,32 @@ export default function Dashboard() {
 
           {/* ── History page ── */}
           {activePage === "history" && (
-            <HistoryPage history={chartHistory} />
+            <HistoryPage
+              sessions={sessions}
+              activeSession={activeSession}
+              isLoading={sessionsLoading}
+              onStartSession={startSession}
+              onStopSession={stopSession}
+              onRenameSession={renameSession}
+              onUpdateNotes={updateNotes}
+              onDeleteSession={deleteSession}
+              onLoadSessionData={loadSessionData}
+              onExportCSV={exportSessionCSV}
+            />
           )}
 
           {/* ── Settings page ── */}
           {activePage === "settings" && (
-            <SettingsPage status={status} lastUpdated={lastUpdated} />
+            <SettingsPage
+              status={status}
+              lastUpdated={lastUpdated}
+              deviceId={deviceId}
+              onDeviceChange={setDevice}
+              sensorRanges={ranges}
+              onRangesSave={updateRanges}
+              onRangesReset={resetRanges}
+              userUID={userId}
+            />
           )}
         </main>
 

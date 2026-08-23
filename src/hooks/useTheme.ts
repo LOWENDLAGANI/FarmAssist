@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState, useCallback } from "react";
 
 export type Theme = "light" | "dark";
 
@@ -35,6 +35,7 @@ function getInitialTheme(): Theme {
  * on <html> and updating the CSS `color-scheme` meta.
  */
 function applyTheme(theme: Theme) {
+  if (typeof document === "undefined") return;
   const root = document.documentElement;
   if (theme === "dark") {
     root.classList.add("dark");
@@ -46,39 +47,33 @@ function applyTheme(theme: Theme) {
   root.setAttribute("color-scheme", theme);
 }
 
+/**
+ * Initializes the theme — applies it immediately to prevent flash,
+ * then returns the current theme.
+ */
+function initTheme(): Theme {
+  const theme = getInitialTheme();
+  applyTheme(theme);
+  return theme;
+}
+
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>(initTheme);
 
-  const mountedRef = useRef(false);
-
-  // Initialize on mount (client-side only)
-  useEffect(() => {
-    const initial = getInitialTheme();
-    if (mountedRef.current) {
-      setThemeState(initial);
-    }
-    applyTheme(initial);
-  }, []);
-
-  // Mark as mounted after first effect runs
-  useEffect(() => {
-    mountedRef.current = true;
-  }, []);
-
-  const setTheme = (t: Theme) => {
+  const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
     applyTheme(t);
     localStorage.setItem(STORAGE_KEY, t);
-  };
+  }, []);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setThemeState((prev) => {
       const next = prev === "dark" ? "light" : "dark";
       applyTheme(next);
       localStorage.setItem(STORAGE_KEY, next);
       return next;
     });
-  };
+  }, []);
 
   return { theme, setTheme, toggleTheme };
 }

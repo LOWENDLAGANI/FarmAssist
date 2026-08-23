@@ -4,11 +4,12 @@
  * Custom React hook for real-time IoT sensor telemetry.
  *
  * Responsibilities:
- *  • Attaches an `onValue` listener to the live RTDB node (sensor/latest).
- *  • Loads persisted history from sensor/history on mount.
- *  • Saves each new reading to sensor/history (debounced every 10s).
+ *  • Attaches an `onValue` listener to the live RTDB node (users/{uid}/devices/{id}/latest).
+ *  • Loads persisted history from users/{uid}/devices/{id}/history on mount.
+ *  • Saves each new reading to users/{uid}/devices/{id}/history.
  *  • Maintains a rolling 15-snapshot history buffer for charts.
  *  • Computes connection status ("live" | "stale" | "offline").
+ *  • Optionally calls onNewReading when data arrives (for session logging).
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -40,7 +41,7 @@ import {
 /** Shape returned by the `useTelemetry` hook. */
 export interface TelemetryState {
   latest: SensorTelemetry | null;
-  /** Persisted chart history (from sensor/history in RTDB). */
+  /** Persisted chart history (from users/{uid}/devices/{id}/history in RTDB). */
   chartHistory: ChartDataPoint[];
   isLoading: boolean;
   status: ConnectionStatus;
@@ -60,7 +61,10 @@ function computeStatus(
 }
 
 export function useTelemetry(
-  staleThreshold: number = DEFAULT_STALE_THRESHOLD_MS
+  userId: string,
+  deviceId: string,
+  staleThreshold: number = DEFAULT_STALE_THRESHOLD_MS,
+  onNewReading?: (data: SensorTelemetry) => void
 ): TelemetryState {
   const [latest, setLatest] = useState<SensorTelemetry | null>(null);
   const [history, setHistory] = useState<ChartDataPoint[]>([]);
@@ -71,14 +75,15 @@ export function useTelemetry(
 
   const lastUpdateRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
-  const historyRef = useRef<ChartDataPoint[]>([]);
   const prevLatestRef = useRef<SensorTelemetry | null>(null);
 
   // ── Load history from RTDB on mount ─────────────────────────
   useEffect(() => {
+    if (!userId || !deviceId) return;
+
     const loadFromDB = async () => {
       try {
-        const histRef = sensorHistoryRef();
+        const histRef = sensorHistoryRef(userId, deviceId);
         const q = query(histRef, orderByKey(), limitToLast(MAX_HISTORY_SIZE));
         const snapshot = await get(q);
 
@@ -91,7 +96,6 @@ export function useTelemetry(
             }
           });
           setHistory(points);
-          historyRef.current = points;
         }
       } catch (err) {
         console.error("[useTelemetry] Failed to load history from DB:", err);
@@ -99,10 +103,12 @@ export function useTelemetry(
     };
 
     loadFromDB();
-  }, []);
+  }, [userId, deviceId]);
 
   // ── RTDB live listener ──────────────────────────────────────
   useEffect(() => {
+    if (!userId || !deviceId) return;
+
     if (mountedRef.current) {
       setIsLoading(true);
       setError(null);
@@ -110,7 +116,7 @@ export function useTelemetry(
 
     let unsubscribe: Unsubscribe;
     try {
-      const dbRef = telemetryRef();
+      const dbRef = telemetryRef(userId, deviceId);
 
       unsubscribe = onValue(
         dbRef,
@@ -166,8 +172,8 @@ export function useTelemetry(
                 : next;
             });
 
-            // Save to RTDB
-            push(sensorHistoryRef(), {
+            // Save to RTDB history
+            push(sensorHistoryRef(userId, deviceId), {
               timestamp: now,
               value: telemetry.temperature,
               temperature: telemetry.temperature,
@@ -176,7 +182,7 @@ export function useTelemetry(
               light: telemetry.light,
             }).then(() => {
               // Prune old entries beyond limit
-              get(sensorHistoryRef()).then((snap) => {
+              get(sensorHistoryRef(userId, deviceId)).then((snap) => {
                 const keys: string[] = [];
                 snap.forEach((child) => {
                   keys.push(child.key!);
@@ -184,10 +190,15 @@ export function useTelemetry(
                 if (keys.length > MAX_HISTORY_SIZE + 5) {
                   const excess = keys.length - MAX_HISTORY_SIZE;
                   const toDelete = keys.slice(0, excess);
-                  toDelete.forEach((k) => remove(ref(db, `sensor/history/${k}`)));
+                  toDelete.forEach((k) =>
+                    remove(ref(db, `users/${userId}/devices/${deviceId}/history/${k}`))
+                  );
                 }
               });
             }).catch(() => {});
+
+            // Write to active logging session if callback provided
+            onNewReading?.(telemetry);
 
             prevLatestRef.current = telemetry;
           }
@@ -217,7 +228,7 @@ export function useTelemetry(
     return () => {
       unsubscribe?.();
     };
-  }, [staleThreshold]);
+  }, [userId, deviceId, staleThreshold, onNewReading]);
 
   // Mark as mounted after first effect runs
   useEffect(() => {

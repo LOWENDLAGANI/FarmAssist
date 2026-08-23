@@ -1,34 +1,45 @@
 /**
  * TopBar.tsx
  * ─────────────────────────────────────────────────────────────────
- * Top navigation bar for the Farm Assistant dashboard.
- * Shows title, connection status, and system icons.
+ * Top navigation bar for the FarmAssist dashboard.
+ * Shows title, connection status, user info, and system icons.
  * ─────────────────────────────────────────────────────────────────
  */
 
 "use client";
 
-import { Cloud, Wifi, WifiOff, BatteryCharging } from "lucide-react";
+import Image from "next/image";
+import { Cloud, Wifi, WifiOff, LogOut } from "lucide-react";
+import { useAuth } from "./AuthProvider";
 import type { ConnectionStatus } from "@/types/telemetry";
 
 interface TopBarProps {
   status: ConnectionStatus;
   lastUpdated?: number | null;
+  deviceId?: string;
 }
 
-export default function TopBar({ status }: TopBarProps) {
+export default function TopBar({ status, deviceId }: TopBarProps) {
+  const { user, logOut } = useAuth();
   const isLive = status === "live";
   const isStale = status === "stale";
 
   return (
     <header className="flex h-12 items-center justify-between border-b border-cyan-900/30 bg-[#0a1628] px-4 sm:h-14 sm:px-6">
-      {/* ── Left: Title ── */}
-      <h1 className="text-base font-semibold text-white sm:text-lg">
-        FarmAssist
-      </h1>
+      {/* ── Left: Title + Device ── */}
+      <div className="flex items-center gap-3">
+        <h1 className="text-base font-semibold text-white sm:text-lg">
+          FarmAssist
+        </h1>
+        {deviceId && (
+          <span className="hidden rounded-md bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-400 sm:inline">
+            {deviceId}
+          </span>
+        )}
+      </div>
 
-      {/* ── Right: Status icons ── */}
-      <div className="flex items-center gap-4">
+      {/* ── Right: Status + User ── */}
+      <div className="flex items-center gap-3">
         {/* Cloud icon */}
         <Cloud className="h-5 w-5 text-slate-400" />
 
@@ -48,12 +59,35 @@ export default function TopBar({ status }: TopBarProps) {
                   : "text-red-400"
             }`}
           >
-            {isLive ? "Live" : isStale ? "Stale" : "Offline"}
+            {isLive ? "Live" : isStale ? "Not Responding" : "Offline"}
           </span>
         </div>
 
-        {/* Battery */}
-        <BatteryCharging className="h-5 w-5 text-slate-400" />
+        {/* User avatar + sign out */}
+        {user && (
+          <div className="flex items-center gap-2">
+            {user.photoURL ? (
+              <Image
+                src={user.photoURL}
+                alt={user.displayName ?? "User"}
+                width={28}
+                height={28}
+                className="h-7 w-7 rounded-full border border-cyan-900/30"
+              />
+            ) : (
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-500/20 text-xs font-bold text-cyan-400">
+                {(user.displayName ?? user.email ?? "U")[0].toUpperCase()}
+              </div>
+            )}
+            <button
+              onClick={logOut}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

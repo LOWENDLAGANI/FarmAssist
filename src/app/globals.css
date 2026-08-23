@@ -1,14 +1,14 @@
 /*
  * globals.css
  * ─────────────────────────────────────────────────────────────────
- * FarmAssist theme — dark navy UI matching the Farm Assistant
- * reference design. Dark mode is the primary theme.
+ * FarmAssist theme with dark/light mode support.
+ * Theme is toggled by adding/removing `dark` class on <html>.
  * ─────────────────────────────────────────────────────────────────
  */
 
 @import "tailwindcss";
 
-/* ── Dark theme (default — always dark) ───────────────────────── */
+/* ── Dark theme (default) ─────────────────────────────────────── */
 :root {
   --background: #060e1a;
   --foreground: #f8fafc;
@@ -19,10 +19,7 @@
   --border: rgba(0, 200, 255, 0.12);
   --ring: #06b6d4;
   --radius: 0.75rem;
-}
 
-/* ── Tailwind v4 theme tokens ──────────────────────────────────── */
-@theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -34,6 +31,27 @@
   --radius-default: var(--radius);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* ── Light theme ───────────────────────────────────────────────── */
+.light {
+  --background: #f0f4f8;
+  --foreground: #1e293b;
+  --card: #ffffff;
+  --card-foreground: #1e293b;
+  --muted: #e2e8f0;
+  --muted-foreground: #64748b;
+  --border: rgba(0, 0, 0, 0.1);
+  --ring: #0891b2;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
 }
 
 /* ── Base resets ────────────────────────────────────────────────── */
@@ -51,7 +69,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Custom scrollbar ───────────────────────────────────────────── */
+/* ── Custom scrollbar (dark) ────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -70,6 +88,15 @@ body {
   background: #2a4a70;
 }
 
+/* ── Light theme scrollbar ──────────────────────────────────────── */
+.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 /* ── Focus ring utility ─────────────────────────────────────────── */
 .focus-ring {
   outline: none;
@@ -80,3 +107,21 @@ body {
   outline-offset: 2px;
   border-radius: var(--radius);
 }
+
+/* ── Light theme overrides for hardcoded dark colors ────────────── */
+/* These override the inline Tailwind dark-only classes used in components */
+.light .bg-\[\#060e1a\] { background-color: #f0f4f8 !important; }
+.light .bg-\[\#0a1628\] { background-color: #ffffff !important; }
+.light .bg-\[\#0c1a2e\] { background-color: #ffffff !important; }
+.light .bg-\[\#0f2240\] { background-color: #e2e8f0 !important; }
+.light .bg-\[\#131f35\] { background-color: #f1f5f9 !important; }
+.light .bg-\[\#1a2d4a\] { background-color: #e2e8f0 !important; }
+
+.light .text-white { color: #1e293b !important; }
+.light .text-slate-200 { color: #334155 !important; }
+.light .text-slate-300 { color: #475569 !important; }
+.light .text-slate-400 { color: #64748b !important; }
+.light .text-slate-500 { color: #94a3b8 !important; }
+
+.light .border-cyan-900\/30 { border-color: rgba(0, 0, 0, 0.1) !important; }
+.light .border-cyan-900\/20 { border-color: rgba(0, 0, 0, 0.08) !important; }

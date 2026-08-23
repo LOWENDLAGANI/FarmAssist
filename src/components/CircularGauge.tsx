@@ -2,8 +2,8 @@
  * CircularGauge.tsx
  * ─────────────────────────────────────────────────────────────────
  * SVG-based circular arc gauge for displaying sensor values.
- * Renders a ~270° arc with a colored fill based on the current
- * value relative to min/max range.
+ * Renders a clean 270° arc (C-shape) with a colored fill based
+ * on the current value relative to min/max range.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -38,12 +38,12 @@ export default function CircularGauge({
   size = 180,
 }: CircularGaugeProps) {
   const { arcPath, bgArcPath } = useMemo(() => {
-    // Arc spans 270° (from 135° to 405°, i.e. 3/4 of a circle)
+    // Arc spans 270° — clean C-shape from bottom-left to bottom-right
     const arcDegrees = 270;
-    const startAngle = 135; // degrees
-    const endAngle = startAngle + arcDegrees;
+    const startAngle = 135; // bottom-left
+    const endAngle = startAngle + arcDegrees; // 405° = bottom-right
 
-    // Clamp value between min and max
+    // Clamp value between min and max, then compute fill percentage
     const clamped = Math.max(min, Math.min(max, value));
     const pct = max > min ? (clamped - min) / (max - min) : 0;
 
@@ -54,7 +54,7 @@ export default function CircularGauge({
     // Convert degrees to radians
     const toRad = (deg: number) => (deg * Math.PI) / 180;
 
-    // SVG arc helper
+    // SVG arc path helper
     const describeArc = (
       centerX: number,
       centerY: number,
@@ -121,7 +121,7 @@ export default function CircularGauge({
           />
         )}
 
-        {/* Glow effect on the filled arc tip */}
+        {/* Glow effect on the filled arc */}
         {arcPath && (
           <path
             d={arcPath}
