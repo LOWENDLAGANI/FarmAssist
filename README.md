@@ -1,8 +1,7 @@
-<<<<<<< HEAD
 # FarmAssist
 FarmAssist is a dashboard for IOT product created by Minetallest
 =======
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is created using JS
 
 ```bash
 npm run dev
