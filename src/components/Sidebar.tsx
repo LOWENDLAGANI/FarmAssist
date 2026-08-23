@@ -36,9 +36,11 @@ const NAV_ITEMS: NavItem[] = [
 interface SidebarProps {
   activePage: string;
   onNavigate: (page: string) => void;
+  /** Show a pulsing alert dot on the Settings icon. */
+  settingsAlert?: boolean;
 }
 
-export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
+export default function Sidebar({ activePage, onNavigate, settingsAlert }: SidebarProps) {
   return (
     <aside className="hidden h-full w-16 shrink-0 flex-col items-center border-r border-cyan-900/30 bg-[#0a1628] py-4 md:flex md:w-20">
       {/* ── Logo ── */}
@@ -69,6 +71,9 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
                 <div className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-cyan-400" />
               )}
               <Icon className="h-5 w-5" />
+              {item.id === "settings" && settingsAlert && (
+                <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400 animate-pulse-dot" />
+              )}
             </button>
           );
         })}

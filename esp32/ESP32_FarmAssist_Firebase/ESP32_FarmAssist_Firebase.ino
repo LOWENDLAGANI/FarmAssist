@@ -15,6 +15,7 @@
 #define DEFAULT_WIFI_PASSWORD "TESTER123"
 #define DEFAULT_USER_UID "tsYo3zKfr8SSowOE23lPQe8Kb0v2"
 #define DEFAULT_DEVICE_ID "esp32-farm-001"
+#define FIRMWARE_VERSION "0.1.0"
 
 #define DEFAULT_SAMPLE_INTERVAL_MS 5000
 #define DEFAULT_HISTORY_INTERVAL_MS 60000
@@ -39,6 +40,7 @@ unsigned long cfgWifiCheckInterval;
 
 String LATEST_PATH;
 String HISTORY_BASE;
+String REGISTRY_PATH;
 
 FirebaseData fbdo;
 FirebaseAuth auth;
@@ -56,6 +58,9 @@ unsigned long lastWifiCheck = 0;
 unsigned long sampleCount = 0;
 unsigned long historyCount = 0;
 bool signUpOk = false;
+bool isOwner = true;            // false when rover_registry says another UID owns this device
+unsigned long lastOwnershipCheck = 0;
+#define OWNERSHIP_CHECK_INTERVAL_MS 30000  // re-check registry every 30s
 
 #define USE_PLACEHOLDER_DATA true
 
@@ -107,6 +112,7 @@ void loadConfig() {
 
   LATEST_PATH = "/users/" + cfgUserUid + "/devices/" + cfgDeviceId + "/latest";
   HISTORY_BASE = "/users/" + cfgUserUid + "/devices/" + cfgDeviceId + "/history";
+  REGISTRY_PATH = "/rover_registry/" + cfgDeviceId;
 }
 
 void saveConfig(String ssid, String pass, String uid, String devid, unsigned long sampint, unsigned long histint, unsigned long wifiint) {
@@ -182,6 +188,72 @@ void setupWebServer() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/save", HTTP_POST, handleSave);
   server.begin();
+}
+
+// ── Ownership guard ──────────────────────────────────────────
+// Reads rover_registry/{deviceId} and sets isOwner flag.
+//  • Record absent or paired=false  → isOwner=true  (free to write)
+//  • paired=true, ownerUid==me     → isOwner=true  (I am the owner)
+//  • paired=true, ownerUid!=me     → isOwner=false (locked out)
+void checkOwnership() {
+  if (!Firebase.ready() || !signUpOk) return;
+
+  FirebaseData snap;
+  if (!Firebase.RTDB.getJSON(&snap, REGISTRY_PATH.c_str())) {
+    // Can't read — assume OK to write (fail open on network errors)
+    return;
+  }
+
+  if (!snap.dataAvailable()) {
+    // No record at all — Rover is unregistered, first-time setup
+    isOwner = true;
+    return;
+  }
+
+  FirebaseJsonData ownerData;
+  FirebaseJsonData pairedData;
+  FirebaseJson *json = snap.jsonObjectPtr();
+
+  json->get(ownerData, "ownerUid");
+  json->get(pairedData, "paired");
+
+  String ownerUid = ownerData.stringValue;
+  bool paired = pairedData.boolValue;
+
+  if (!paired || ownerUid.length() == 0) {
+    // Rover was unlinked — available for pairing
+    isOwner = true;
+  } else if (ownerUid == cfgUserUid) {
+    // I am the registered owner
+    isOwner = true;
+  } else {
+    // Another account owns this Rover
+    isOwner = false;
+  }
+
+  Serial.println(nowPrefix() + "[Ownership] " + String(isOwner ? "OK" : "DENIED") +
+                  " (owner=" + ownerUid + ", paired=" + String(paired ? "yes" : "no") + ")");
+}
+
+void updateLastSeen() {
+  if (!Firebase.ready() || !signUpOk) return;
+
+  double epoch = 0;
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo, 200)) {
+    time_t now;
+    time(&now);
+    epoch = (double)now;
+  }
+
+  FirebaseJson updateJson;
+  updateJson.set("lastSeen", epoch > 0 ? (double)epoch * 1000.0 : (double)millis());
+
+  if (Firebase.RTDB.updateNode(&fbdo, REGISTRY_PATH.c_str(), &updateJson)) {
+    Serial.println(nowPrefix() + "[Registry] lastSeen updated -> " + REGISTRY_PATH);
+  } else {
+    Serial.println(nowPrefix() + "[Registry] lastSeen FAILED - reason: " + fbdo.errorReason());
+  }
 }
 
 bool syncTime() {
@@ -270,11 +342,24 @@ void setup() {
 
   randomSeed(analogRead(0));
 
+  // Check ownership before first write
+  checkOwnership();
+
+  // Write initial lastSeen + firmwareVersion to registry on boot
+  updateLastSeen();
+  if (Firebase.ready() && signUpOk) {
+    FirebaseJson fwJson;
+    fwJson.set("firmwareVersion", FIRMWARE_VERSION);
+    Firebase.RTDB.updateNode(&fbdo, REGISTRY_PATH.c_str(), &fwJson);
+  }
+
   Serial.println("===============================================");
   Serial.println("  Setup complete.");
   Serial.println("  Config portal -> http://" + WiFi.softAPIP().toString());
   Serial.println("  " + LATEST_PATH + " -> updated every " + String(cfgSampleInterval / 1000) + "s");
   Serial.println("  " + HISTORY_BASE + " -> logged every " + String(cfgHistoryInterval / 1000) + "s");
+  Serial.println("  " + REGISTRY_PATH + "/lastSeen -> heartbeat on every sample");
+  Serial.println("  Ownership: " + String(isOwner ? "GRANTED" : "DENIED (update USER_UID to: " + cfgUserUid + ")"));
   Serial.println("===============================================\n");
 }
 
@@ -337,11 +422,18 @@ void sampleSensors() {
     latestJson.set("timestamp_epoch", epoch);
     latestJson.set("timestamp_str", timeStr);
 
-    if (Firebase.RTDB.setJSON(&fbdo, LATEST_PATH.c_str(), &latestJson)) {
-      Serial.println(nowPrefix() + "[Latest] Updated OK -> " + LATEST_PATH);
+    if (!isOwner) {
+      Serial.println(nowPrefix() + "[Latest] SKIPPED - not the registered owner. Update USER_UID to: " + cfgUserUid);
     } else {
-      Serial.println(nowPrefix() + "[Latest] FAILED - reason: " + fbdo.errorReason());
+      if (Firebase.RTDB.setJSON(&fbdo, LATEST_PATH.c_str(), &latestJson)) {
+        Serial.println(nowPrefix() + "[Latest] Updated OK -> " + LATEST_PATH);
+      } else {
+        Serial.println(nowPrefix() + "[Latest] FAILED - reason: " + fbdo.errorReason());
+      }
     }
+
+    // Always update lastSeen so the web app knows the Rover is physically online
+    updateLastSeen();
   } else {
     Serial.println(nowPrefix() + "[Latest] SKIPPED - Firebase not ready/signed in");
   }
@@ -359,6 +451,11 @@ void saveHistoryToFirebase() {
   }
   if (!signUpOk) {
     Serial.println(nowPrefix() + "[History] SKIPPED - not signed in to Firebase.");
+    Serial.println("-----------------------------------------------");
+    return;
+  }
+  if (!isOwner) {
+    Serial.println(nowPrefix() + "[History] SKIPPED - not the registered owner.");
     Serial.println("-----------------------------------------------");
     return;
   }
@@ -412,6 +509,12 @@ void loop() {
   server.handleClient();
 
   unsigned long now = millis();
+
+  // Periodic ownership check
+  if (now - lastOwnershipCheck > OWNERSHIP_CHECK_INTERVAL_MS || lastOwnershipCheck == 0) {
+    lastOwnershipCheck = now;
+    checkOwnership();
+  }
 
   if (now - lastWifiCheck > cfgWifiCheckInterval) {
     lastWifiCheck = now;

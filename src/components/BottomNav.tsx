@@ -34,9 +34,11 @@ const NAV_ITEMS: NavItem[] = [
 interface BottomNavProps {
   activePage: string;
   onNavigate: (page: string) => void;
+  /** Show a pulsing alert dot on the Settings icon. */
+  settingsAlert?: boolean;
 }
 
-export default function BottomNav({ activePage, onNavigate }: BottomNavProps) {
+export default function BottomNav({ activePage, onNavigate, settingsAlert }: BottomNavProps) {
   return (
     <nav
       aria-label="Main navigation"
@@ -57,7 +59,12 @@ export default function BottomNav({ activePage, onNavigate }: BottomNavProps) {
                 : "text-slate-400 active:bg-slate-800/70 active:text-slate-200"
             }`}
           >
-            <Icon className="h-5 w-5" />
+            <span className="relative">
+              <Icon className="h-5 w-5" />
+              {item.id === "settings" && settingsAlert && (
+                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-400 animate-pulse-dot" />
+              )}
+            </span>
             <span className="text-[10px] font-medium">{item.label}</span>
           </button>
         );

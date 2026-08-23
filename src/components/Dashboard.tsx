@@ -31,6 +31,7 @@ import ChartSection from "./ChartSection";
 import RecommendationPanel from "./RecommendationPanel";
 import ErrorDialog from "./ErrorDialog";
 import DeviceMismatchBanner from "./DeviceMismatchBanner";
+import OwnershipDeniedOverlay from "./OwnershipDeniedOverlay";
 import SensorsPage from "./pages/SensorsPage";
 import CameraPage from "./pages/CameraPage";
 import HistoryPage from "./pages/HistoryPage";
@@ -54,6 +55,7 @@ export default function Dashboard() {
   const {
     status: deviceLinkStatus,
     isLoading: deviceValidationLoading,
+    registryInfo,
   } = useDeviceValidation(userId, deviceId);
 
   // ── Auto-navigate to Settings on first mismatch/unregistered ─
@@ -137,7 +139,7 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#060e1a] md:flex-row">
       {/* ── Sidebar (desktop only; visibility is controlled by CSS) ── */}
-      <Sidebar activePage={activePage} onNavigate={setActivePage} />
+      <Sidebar activePage={activePage} onNavigate={setActivePage} settingsAlert={deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered"} />
 
       {/* ── Main content area ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -145,7 +147,17 @@ export default function Dashboard() {
         <TopBar status={status} lastUpdated={lastUpdated} deviceId={deviceId} />
 
         {/* ── Scrollable content ── */}
-        <main className="flex-1 overflow-y-auto p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-6">
+        <main className="relative flex-1 overflow-y-auto p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-6">
+          {/* Ownership denied overlay */}
+          {deviceLinkStatus === "taken" && activePage !== "settings" && (
+            <OwnershipDeniedOverlay
+              deviceId={deviceId}
+              currentUserUid={userId}
+              registryInfo={registryInfo}
+              onGoToSettings={() => setActivePage("settings")}
+            />
+          )}
+
           {/* Loading state */}
           {isLoading && (
             <div className="mb-4 flex items-center gap-2 rounded-xl border border-cyan-900/30 bg-[#0c1a2e] p-3 sm:mb-6 sm:p-4">
@@ -161,6 +173,7 @@ export default function Dashboard() {
             status={deviceLinkStatus}
             currentDeviceId={deviceId}
             currentUserUid={userId}
+            registryInfo={registryInfo}
           />
 
           {/* Error state — banner for minor, dialog for critical */}
@@ -252,7 +265,7 @@ export default function Dashboard() {
         </main>
 
         {/* ── Bottom Nav (mobile only; visibility is controlled by CSS) ── */}
-        <BottomNav activePage={activePage} onNavigate={setActivePage} />
+        <BottomNav activePage={activePage} onNavigate={setActivePage} settingsAlert={deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered"} />
       </div>
     </div>
   );

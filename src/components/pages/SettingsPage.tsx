@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useAppTheme } from "../ThemeProvider";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
+import RoverOverviewCard from "../RoverOverviewCard";
 import type { ConnectionStatus, SensorKey } from "@/types/telemetry";
 import { SENSOR_META } from "@/types/telemetry";
 import type { SensorRanges } from "@/hooks/useSensorRanges";
@@ -53,6 +54,22 @@ function getRangeStep(sensor: SensorKey): number {
 
 function getRangePercent(value: number, min: number, max: number): number {
   return ((value - min) / (max - min)) * 100;
+}
+
+/** Format a lastSeen timestamp into a human-readable relative string. */
+function formatLastSeen(lastSeenMs: number): string {
+  const now = Date.now();
+  const diffMs = now - lastSeenMs;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 30) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m ago`;
+  return `${diffDay}d ${diffHr % 24}h ago`;
 }
 
 interface VisualRangeSelectorProps {
@@ -239,7 +256,7 @@ export default function SettingsPage({
   userUID,
 }: SettingsPageProps) {
   const { theme, toggleTheme } = useAppTheme();
-  const { registerDevice, forceRegisterDevice, unlinkDevice, status: deviceLinkStatus } = useDeviceValidation(userUID, deviceId);
+  const { registerDevice, forceRegisterDevice, unlinkDevice, status: deviceLinkStatus, registryInfo } = useDeviceValidation(userUID, deviceId);
   const [deviceInput, setDeviceInput] = useState(deviceId);
   const [saved, setSaved] = useState(false);
   const [pairFailed, setPairFailed] = useState(false);
@@ -353,6 +370,14 @@ export default function SettingsPage({
       </div>
 
       <div className="space-y-4">
+        {/* Rover Overview */}
+        <RoverOverviewCard
+          deviceId={deviceId}
+          connectionStatus={status}
+          linkStatus={deviceLinkStatus}
+          registryInfo={registryInfo}
+        />
+
         {/* User UID (for ESP32 pairing) */}
         <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
           <h3 className="mb-3 text-sm font-semibold text-white">
@@ -452,6 +477,13 @@ export default function SettingsPage({
                   <Unlink className="h-3 w-3" />
                   Unlink
                 </button>
+              </div>
+            )}
+            {deviceLinkStatus === "linked" && registryInfo?.lastSeen && (
+              <div className="mt-2 flex items-center gap-2 border-t border-cyan-900/20 pt-2">
+                <p className="text-[10px] text-slate-500">
+                  Last seen: <span className="text-slate-400">{formatLastSeen(registryInfo.lastSeen)}</span>
+                </p>
               </div>
             )}
             {isTaken && (

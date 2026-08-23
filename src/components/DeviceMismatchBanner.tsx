@@ -21,18 +21,36 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import type { DeviceLinkStatus } from "@/hooks/useDeviceValidation";
+import type { DeviceLinkStatus, RoverRegistryInfo } from "@/hooks/useDeviceValidation";
+
+/** Format a lastSeen timestamp into a human-readable relative string. */
+function formatLastSeen(lastSeenMs: number): string {
+  const now = Date.now();
+  const diffMs = now - lastSeenMs;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 30) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m ago`;
+  return `${diffDay}d ${diffHr % 24}h ago`;
+}
 
 interface DeviceMismatchBannerProps {
   status: DeviceLinkStatus;
   currentDeviceId: string;
   currentUserUid: string;
+  registryInfo?: RoverRegistryInfo | null;
 }
 
 export default function DeviceMismatchBanner({
   status,
   currentDeviceId,
   currentUserUid,
+  registryInfo,
 }: DeviceMismatchBannerProps) {
   const [showDialog, setShowDialog] = useState(false);
   const [uidCopied, setUidCopied] = useState(false);
@@ -152,11 +170,16 @@ export default function DeviceMismatchBanner({
                     account can be paired to a Rover at a time.
                   </p>
 
-                  <div className="rounded-xl border border-red-500/20 bg-[#0a1628] p-3">
+                  <div className="rounded-xl border border-red-500/20 bg-[#0a1628] p-3 space-y-1">
                     <p className="text-xs text-red-400">
                       &#9888;&#65039; You cannot receive live data while
                       another account owns this Rover.
                     </p>
+                    {registryInfo?.lastSeen && (
+                      <p className="text-[10px] text-slate-500">
+                        Rover was last seen {formatLastSeen(registryInfo.lastSeen)}
+                      </p>
+                    )}
                   </div>
 
                   <div>

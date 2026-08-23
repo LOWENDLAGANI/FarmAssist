@@ -44,6 +44,10 @@ export interface RoverRegistryInfo {
   paired: boolean;
   /** Unix timestamp (ms) when the Rover was paired. */
   pairedAt: number;
+  /** Unix timestamp (ms) of the last heartbeat from the ESP32. */
+  lastSeen: number | null;
+  /** Firmware version string reported by the ESP32. */
+  firmwareVersion: string | null;
 }
 
 export interface DeviceValidationResult {
@@ -103,6 +107,8 @@ export function useDeviceValidation(
             ownerUid: data.ownerUid ?? "",
             paired: data.paired === true,
             pairedAt: data.pairedAt ?? 0,
+            lastSeen: typeof data.lastSeen === "number" ? data.lastSeen : null,
+            firmwareVersion: typeof data.firmwareVersion === "string" ? data.firmwareVersion : null,
           };
           setRegistryInfo(info);
 
