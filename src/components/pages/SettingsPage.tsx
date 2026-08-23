@@ -22,8 +22,12 @@ import {
   RotateCcw,
   Copy,
   User,
+  Unlink,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { useAppTheme } from "../ThemeProvider";
+import { useDeviceValidation } from "@/hooks/useDeviceValidation";
 import type { ConnectionStatus, SensorKey } from "@/types/telemetry";
 import { SENSOR_META } from "@/types/telemetry";
 import type { SensorRanges } from "@/hooks/useSensorRanges";
@@ -235,17 +239,23 @@ export default function SettingsPage({
   userUID,
 }: SettingsPageProps) {
   const { theme, toggleTheme } = useAppTheme();
+  const { registerDevice, unlinkDevice, status: deviceLinkStatus } = useDeviceValidation(userUID, deviceId);
   const [deviceInput, setDeviceInput] = useState(deviceId);
   const [saved, setSaved] = useState(false);
   const [uidCopied, setUidCopied] = useState(false);
+  const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
+  const [unlinked, setUnlinked] = useState(false);
 
   // ── Local editing state for ranges ──────────────────────────
   const [editingRanges, setEditingRanges] = useState<SensorRanges>(sensorRanges);
   const [rangesSaved, setRangesSaved] = useState(false);
 
-  const handleSaveDevice = () => {
-    if (deviceInput.trim().length === 0) return;
-    onDeviceChange(deviceInput.trim());
+  const handleSaveDevice = async () => {
+    const trimmed = deviceInput.trim();
+    if (trimmed.length === 0) return;
+    onDeviceChange(trimmed);
+    // Register this user as the device owner in the device_links registry
+    await registerDevice(userUID, trimmed);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -297,6 +307,13 @@ export default function SettingsPage({
     });
     setRangesSaved(true);
     setTimeout(() => setRangesSaved(false), 2000);
+  };
+
+  const handleUnlinkDevice = async () => {
+    await unlinkDevice(userUID, deviceId);
+    setShowUnlinkConfirm(false);
+    setUnlinked(true);
+    setTimeout(() => setUnlinked(false), 2000);
   };
 
   const handleCopyUID = async () => {
@@ -402,11 +419,100 @@ export default function SettingsPage({
           <p className="mt-2 text-[11px] text-slate-500">
             Current: <span className="text-cyan-400">{deviceId}</span>
           </p>
+
+          {/* Device link status indicator */}
           <div className="mt-3 rounded-xl border border-cyan-900/20 bg-[#0a1628] p-3">
-            <p className="text-[11px] text-slate-500">
-              Your data path: Contact Support
-            </p>
+            {deviceLinkStatus === "linked" && (
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                <p className="flex-1 text-[11px] text-emerald-400">
+                  Rover is linked to your account
+                </p>
+                <button
+                  onClick={() => setShowUnlinkConfirm(true)}
+                  className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-950/20 px-2.5 py-1 text-[10px] text-red-400 transition-colors hover:border-red-500/40 hover:bg-red-950/40"
+                >
+                  <Unlink className="h-3 w-3" />
+                  Unlink
+                </button>
+              </div>
+            )}
+            {deviceLinkStatus === "mismatch" && (
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                <p className="text-[11px] text-amber-400">
+                  Rover is linked to a different account — update the Rover&apos;s User UID
+                </p>
+              </div>
+            )}
+            {deviceLinkStatus === "unregistered" && (
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                <p className="text-[11px] text-cyan-400">
+                  Rover not yet paired — click &quot;Pair&quot; after updating the Rover&apos;s User UID
+                </p>
+              </div>
+            )}
+            {deviceLinkStatus === "loading" && (
+              <p className="text-[11px] text-slate-500">Checking link status…</p>
+            )}
+            {unlinked && (
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-red-400" />
+                <p className="text-[11px] text-red-400">
+                  Rover unlinked
+                </p>
+              </div>
+            )}
           </div>
+
+          {/* Unlink confirmation dialog */}
+          {showUnlinkConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div
+                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                onClick={() => setShowUnlinkConfirm(false)}
+              />
+              <div className="relative w-full max-w-sm rounded-2xl border border-red-500/30 bg-[#0c1a2e] p-0 shadow-2xl shadow-red-950/50 overflow-hidden">
+                <div className="flex items-center justify-between border-b border-red-900/30 bg-red-950/30 px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/20">
+                      <AlertTriangle className="h-5 w-5 text-red-400" />
+                    </div>
+                    <h3 className="text-base font-semibold text-white">Unlink Rover</h3>
+                  </div>
+                  <button
+                    onClick={() => setShowUnlinkConfirm(false)}
+                    className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="px-6 py-5 space-y-3">
+                  <p className="text-sm text-slate-300 leading-relaxed">
+                    This will remove the pairing between your account and Rover <span className="font-mono text-cyan-400">{deviceId}</span>.
+                  </p>
+                  <p className="text-sm text-slate-300 leading-relaxed">
+                    You will stop receiving live data until you pair it again. A different account will then be able to pair this Rover.
+                  </p>
+                </div>
+                <div className="flex items-center justify-end gap-3 border-t border-cyan-900/20 px-6 py-4">
+                  <button
+                    onClick={() => setShowUnlinkConfirm(false)}
+                    className="rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2 text-sm text-slate-400 transition-colors hover:bg-[#0f2240] hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUnlinkDevice}
+                    className="rounded-xl bg-red-500/20 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/30"
+                  >
+                    Unlink Rover
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sensor Ranges */}

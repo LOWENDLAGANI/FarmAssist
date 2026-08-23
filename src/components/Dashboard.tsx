@@ -13,12 +13,13 @@
 
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "./AuthProvider";
 import { useTelemetry } from "@/hooks/useTelemetry";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useSensorRanges } from "@/hooks/useSensorRanges";
 import { useLoggingSession } from "@/hooks/useLoggingSession";
+import { useDeviceValidation } from "@/hooks/useDeviceValidation";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { SensorKey } from "@/types/telemetry";
 import { generateRecommendations } from "@/lib/recommendations";
@@ -29,6 +30,7 @@ import SensorCard from "./SensorCard";
 import ChartSection from "./ChartSection";
 import RecommendationPanel from "./RecommendationPanel";
 import ErrorDialog from "./ErrorDialog";
+import DeviceMismatchBanner from "./DeviceMismatchBanner";
 import SensorsPage from "./pages/SensorsPage";
 import CameraPage from "./pages/CameraPage";
 import HistoryPage from "./pages/HistoryPage";
@@ -47,6 +49,23 @@ export default function Dashboard() {
 
   // ── Device pairing ────────────────────────────────────────
   const { deviceId, setDevice } = useDeviceId();
+
+  // ── Device-account linkage validation ──────────────────────
+  const {
+    status: deviceLinkStatus,
+    isLoading: deviceValidationLoading,
+  } = useDeviceValidation(userId, deviceId);
+
+  // ── Auto-navigate to Settings on first mismatch/unregistered ─
+  const hasRedirectedRef = useRef(false);
+  useEffect(() => {
+    if (deviceValidationLoading) return;
+    if (hasRedirectedRef.current) return;
+    if (deviceLinkStatus === "mismatch" || deviceLinkStatus === "unregistered") {
+      hasRedirectedRef.current = true;
+      setActivePage("settings");
+    }
+  }, [deviceValidationLoading, deviceLinkStatus]);
 
   // ── Logging session management (user-scoped) ──────────────
   const {
@@ -136,6 +155,13 @@ export default function Dashboard() {
               </span>
             </div>
           )}
+
+          {/* Device linkage mismatch banner */}
+          <DeviceMismatchBanner
+            status={deviceLinkStatus}
+            currentDeviceId={deviceId}
+            currentUserUid={userId}
+          />
 
           {/* Error state — banner for minor, dialog for critical */}
           {error && (

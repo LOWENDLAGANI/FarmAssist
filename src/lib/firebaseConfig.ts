@@ -127,3 +127,16 @@ export function sessionRef(userId: string, sessionId: string, deviceId?: string)
   const id = deviceId ?? getDeviceId();
   return ref(db, `users/${userId}/devices/${id}/sessions/${sessionId}`);
 }
+
+// ── Device Link Registry ───────────────────────────────────────
+
+/**
+ * Reference to the device link record for a user's device.
+ * Path: users/{uid}/devices/{deviceId}/link
+ *
+ * This record is written when a user pairs a Rover in Settings.
+ * Its existence confirms that the current user has paired this device.
+ */
+export function deviceLinkRef(userId: string, deviceId: string): DatabaseReference {
+  return ref(db, `users/${userId}/devices/${deviceId}/link`);
+}
