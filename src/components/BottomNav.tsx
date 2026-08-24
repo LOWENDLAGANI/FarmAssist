@@ -11,9 +11,9 @@
 import {
   LayoutDashboard,
   Bell,
-  Camera,
   Clock,
   Settings,
+  SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
 
@@ -25,8 +25,8 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { icon: LayoutDashboard, label: "Home", id: "dashboard" },
+  { icon: SlidersHorizontal, label: "Control", id: "control" },
   { icon: Bell, label: "Alerts", id: "notifications" },
-  { icon: Camera, label: "Camera", id: "camera" },
   { icon: Clock, label: "History", id: "history" },
   { icon: Settings, label: "Settings", id: "settings" },
 ];

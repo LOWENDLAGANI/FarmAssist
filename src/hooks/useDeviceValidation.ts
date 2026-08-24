@@ -71,6 +71,11 @@ export interface DeviceValidationResult {
  * @param userId   The currently logged-in Firebase Auth UID.
  * @param deviceId The Rover ID entered in the dashboard.
  */
+/** Check if the user is a guest (demo mode) */
+function isGuestUser(userId: string): boolean {
+  return userId.startsWith("guest-");
+}
+
 export function useDeviceValidation(
   userId: string,
   deviceId: string
@@ -78,6 +83,24 @@ export function useDeviceValidation(
   const [status, setStatus] = useState<DeviceLinkStatus>("loading");
   const [registryInfo, setRegistryInfo] = useState<RoverRegistryInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // ── Skip Firebase for guest users ──────────────────────────
+  if (isGuestUser(userId)) {
+    return {
+      status: "linked",
+      registryInfo: {
+        ownerUid: userId,
+        paired: true,
+        pairedAt: Date.now(),
+        lastSeen: Date.now(),
+        firmwareVersion: "v1.0.0-demo",
+      },
+      isLoading: false,
+      registerDevice: async () => true,
+      forceRegisterDevice: async () => {},
+      unlinkDevice: async () => {},
+    };
+  }
 
   // ── Listen to rover_registry/{deviceId} ─────────────────────
   useEffect(() => {

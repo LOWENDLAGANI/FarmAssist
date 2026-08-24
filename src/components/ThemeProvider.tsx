@@ -2,14 +2,21 @@
  * ThemeProvider.tsx
  * ─────────────────────────────────────────────────────────────────
  * React Context provider that wraps the entire dashboard and
- * exposes theme state + custom theme controls to all child components.
+ * exposes theme state, device ID, and custom theme controls.
+ * When a user is signed in, settings are synced to Firebase.
+ *
+ * This is the single source of truth for:
+ *  • Theme + custom theme (via useTheme + useUserSettings)
+ *  • Device ID (via useUserSettings)
  * ─────────────────────────────────────────────────────────────────
  */
 
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
-import { useTheme, type Theme, type CustomThemeConfig, THEMES } from "@/hooks/useTheme";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { useTheme, applyTheme, type Theme, type CustomThemeConfig, THEMES } from "@/hooks/useTheme";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { useAuth } from "./AuthProvider";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -19,6 +26,10 @@ interface ThemeContextValue {
   customTheme: CustomThemeConfig;
   setCustomTheme: (config: CustomThemeConfig) => void;
   applyCustomTheme: () => void;
+  /** Synced device ID — same across all devices for this user. */
+  deviceId: string;
+  /** Update device ID (syncs to Firebase + localStorage). */
+  setDeviceId: (id: string) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
@@ -36,6 +47,8 @@ const ThemeContext = createContext<ThemeContextValue>({
   },
   setCustomTheme: () => {},
   applyCustomTheme: () => {},
+  deviceId: "esp32-farm-001",
+  setDeviceId: () => {},
 });
 
 export function useAppTheme() {
@@ -43,17 +56,81 @@ export function useAppTheme() {
 }
 
 export default function ThemeProvider({ children }: { children: ReactNode }) {
-  const { theme, setTheme, toggleTheme, customTheme, setCustomTheme, applyCustomTheme } = useTheme();
+  const { user } = useAuth();
+  const userId = user?.uid ?? "";
+
+  const {
+    theme: localTheme,
+    setTheme: setThemeLocal,
+    toggleTheme: toggleThemeLocal,
+    customTheme: localCustomTheme,
+    setCustomTheme: setCustomThemeLocal,
+    applyCustomTheme: applyCustomThemeLocal,
+  } = useTheme();
+
+  // Synced settings from Firebase
+  const { settings, isLoaded, saveSetting } = useUserSettings(userId);
+
+  // ── Apply Firebase-synced theme to DOM when it changes ──────
+  useEffect(() => {
+    if (isLoaded) {
+      applyTheme(settings.theme, settings.customTheme);
+    }
+  }, [settings.theme, settings.customTheme, isLoaded]);
+
+  // ── Expose the Firebase-synced theme (not localStorage one) ─
+  const activeTheme = isLoaded ? settings.theme : localTheme;
+  const activeCustomTheme = isLoaded ? settings.customTheme : localCustomTheme;
+
+  // ── Theme controls (write to Firebase via useUserSettings) ──
+  const setTheme = (t: Theme) => {
+    setThemeLocal(t);
+    saveSetting("theme", t);
+  };
+
+  const toggleTheme = () => {
+    const themeOrder: Theme[] = ["midnight", "forest", "sunset", "midnight-blue", "light", "custom"];
+    const idx = themeOrder.indexOf(activeTheme);
+    const next = themeOrder[(idx + 1) % themeOrder.length];
+    setThemeLocal(next);
+    saveSetting("theme", next);
+  };
+
+  const setCustomTheme = (config: CustomThemeConfig) => {
+    setCustomThemeLocal(config);
+    saveSetting("customTheme", config);
+    // If currently on custom theme, apply immediately
+    if (activeTheme === "custom") {
+      applyTheme("custom", config);
+    }
+  };
+
+  const applyCustomTheme = () => {
+    applyCustomThemeLocal();
+    saveSetting("theme", "custom");
+  };
+
+  // ── Device ID controls (synced via useUserSettings) ────────
+  const setDeviceId = (id: string) => {
+    const trimmed = id.trim();
+    if (trimmed.length === 0) return;
+    // Update localStorage directly
+    localStorage.setItem("farmassist-device-id", trimmed);
+    // Sync to Firebase
+    saveSetting("deviceId", trimmed);
+  };
 
   return (
     <ThemeContext.Provider value={{
-      theme,
+      theme: activeTheme,
       setTheme,
       toggleTheme,
       themes: THEMES,
-      customTheme,
+      customTheme: activeCustomTheme,
       setCustomTheme,
       applyCustomTheme,
+      deviceId: settings.deviceId,
+      setDeviceId,
     }}>
       {children}
     </ThemeContext.Provider>

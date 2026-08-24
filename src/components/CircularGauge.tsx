@@ -4,12 +4,15 @@
  * SVG-based circular arc gauge for displaying sensor values.
  * Renders a clean 270° arc (C-shape) with a colored fill based
  * on the current value relative to min/max range.
+ *
+ * Uses stroke-dashoffset for smooth CSS-transitionable arc fills,
+ * and requestAnimationFrame for silky number interpolation.
  * ─────────────────────────────────────────────────────────────────
  */
 
 "use client";
 
-import { useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 interface CircularGaugeProps {
   /** Current sensor value */
@@ -28,6 +31,10 @@ interface CircularGaugeProps {
   size?: number;
 }
 
+/** Arc geometry constants (270° C-shape) */
+const ARC_DEGREES = 270;
+const START_ANGLE = 135; // bottom-left
+
 export default function CircularGauge({
   value,
   min,
@@ -37,24 +44,40 @@ export default function CircularGauge({
   decimals = 1,
   size = 180,
 }: CircularGaugeProps) {
-  const { arcPath, bgArcPath } = useMemo(() => {
-    // Arc spans 270° — clean C-shape from bottom-left to bottom-right
-    const arcDegrees = 270;
-    const startAngle = 135; // bottom-left
-    const endAngle = startAngle + arcDegrees; // 405° = bottom-right
+  // ── Smooth number interpolation via rAF ──────────────────────
+  const [displayValue, setDisplayValue] = useState(value);
+  const rafRef = useRef<number>(0);
+  const currentRef = useRef(value);
+  const targetRef = useRef(value);
 
-    // Clamp value between min and max, then compute fill percentage
-    const clamped = Math.max(min, Math.min(max, value));
-    const pct = max > min ? (clamped - min) / (max - min) : 0;
+  useEffect(() => {
+    targetRef.current = value;
 
+    const tick = () => {
+      const diff = targetRef.current - currentRef.current;
+      // Ease toward target — ~8% per frame gives a smooth 60fps lerp
+      if (Math.abs(diff) < 0.001) {
+        currentRef.current = targetRef.current;
+        setDisplayValue(targetRef.current);
+        return;
+      }
+      currentRef.current += diff * 0.08;
+      setDisplayValue(currentRef.current);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [value]);
+
+  // ── SVG arc geometry (only depends on size, not value) ───────
+  const { bgArcPath, totalArcLength } = useMemo(() => {
     const cx = size / 2;
     const cy = size / 2;
     const radius = (size - 16) / 2; // 8px padding on each side
-
-    // Convert degrees to radians
+    const endAngle = START_ANGLE + ARC_DEGREES;
     const toRad = (deg: number) => (deg * Math.PI) / 180;
 
-    // SVG arc path helper
     const describeArc = (
       centerX: number,
       centerY: number,
@@ -70,23 +93,23 @@ export default function CircularGauge({
       return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}`;
     };
 
-    // Background arc (full 270°)
-    const bgPath = describeArc(cx, cy, radius, startAngle, endAngle);
+    const bgPath = describeArc(cx, cy, radius, START_ANGLE, endAngle);
 
-    // Filled arc (proportional to value)
-    const fillEnd = startAngle + arcDegrees * pct;
-    const fPath =
-      pct > 0.001
-        ? describeArc(cx, cy, radius, startAngle, fillEnd)
-        : "";
+    // Arc length = 2πr × (sweep/360)
+    const arcLen = (2 * Math.PI * radius * ARC_DEGREES) / 360;
 
-    return { arcPath: fPath, bgArcPath: bgPath };
-  }, [value, min, max, size]);
+    return { bgArcPath: bgPath, totalArcLength: arcLen };
+  }, [size]);
 
-  // Format the display value
-  const displayValue =
-    value !== null && value !== undefined
-      ? value.toFixed(decimals)
+  // ── Compute fill percentage from displayValue ────────────────
+  const clamped = Math.max(min, Math.min(max, displayValue));
+  const pct = max > min ? (clamped - min) / (max - min) : 0;
+  const fillOffset = totalArcLength * (1 - pct);
+
+  // Format the display number
+  const formattedValue =
+    displayValue !== null && displayValue !== undefined
+      ? displayValue.toFixed(decimals)
       : "—";
 
   const cx = size / 2;
@@ -107,32 +130,37 @@ export default function CircularGauge({
           stroke="rgba(255,255,255,0.08)"
           strokeWidth={10}
           strokeLinecap="round"
+          strokeDasharray={totalArcLength}
+          strokeDashoffset={0}
         />
 
-        {/* Filled arc */}
-        {arcPath && (
-          <path
-            d={arcPath}
-            fill="none"
-            stroke={color}
-            strokeWidth={10}
-            strokeLinecap="round"
-            className="transition-all duration-700 ease-out"
-          />
-        )}
+        {/* Filled arc — smooth CSS transition on stroke-dashoffset */}
+        <path
+          d={bgArcPath}
+          fill="none"
+          stroke={color}
+          strokeWidth={10}
+          strokeLinecap="round"
+          strokeDasharray={totalArcLength}
+          strokeDashoffset={fillOffset}
+          style={{ transition: "stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)" }}
+        />
 
         {/* Glow effect on the filled arc */}
-        {arcPath && (
-          <path
-            d={arcPath}
-            fill="none"
-            stroke={color}
-            strokeWidth={10}
-            strokeLinecap="round"
-            opacity={0.3}
-            filter="blur(6px)"
-          />
-        )}
+        <path
+          d={bgArcPath}
+          fill="none"
+          stroke={color}
+          strokeWidth={10}
+          strokeLinecap="round"
+          strokeDasharray={totalArcLength}
+          strokeDashoffset={fillOffset}
+          opacity={0.3}
+          style={{
+            filter: "blur(6px)",
+            transition: "stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
+        />
 
         {/* Value text */}
         <text
@@ -143,7 +171,7 @@ export default function CircularGauge({
           className="fill-white text-3xl font-bold"
           style={{ fontSize: size * 0.22 }}
         >
-          {displayValue}
+          {formattedValue}
         </text>
 
         {/* Unit text */}

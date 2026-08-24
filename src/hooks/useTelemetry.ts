@@ -61,6 +61,11 @@ function computeStatus(
   return "offline";
 }
 
+/** Check if the user is a guest (demo mode) */
+function isGuestUser(userId: string): boolean {
+  return userId.startsWith("guest-");
+}
+
 export function useTelemetry(
   userId: string,
   deviceId: string,
@@ -78,9 +83,21 @@ export function useTelemetry(
   const mountedRef = useRef(false);
   const prevLatestRef = useRef<SensorTelemetry | null>(null);
 
+  // ── Skip Firebase for guest users ──────────────────────────
+  if (isGuestUser(userId)) {
+    return {
+      latest: null,
+      chartHistory: [],
+      isLoading: false,
+      status: "live",
+      error: null,
+      lastUpdated: null,
+    };
+  }
+
   // ── Load history from RTDB on mount ─────────────────────────
   useEffect(() => {
-    if (!userId || !deviceId) return;
+    if (!userId || !deviceId || isGuestUser(userId)) return;
 
     const loadFromDB = async () => {
       try {
@@ -123,7 +140,7 @@ export function useTelemetry(
 
   // ── RTDB live listener ──────────────────────────────────────
   useEffect(() => {
-    if (!userId || !deviceId) return;
+    if (!userId || !deviceId || isGuestUser(userId)) return;
 
     if (mountedRef.current) {
       setIsLoading(true);

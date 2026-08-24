@@ -53,6 +53,11 @@ const DEFAULT_RANGES: SensorRanges = {
  * @param deviceId - The device ID to load ranges for
  * @returns        - ranges, updateRange, updateRanges, resetToDefaults, isLoading
  */
+/** Check if the user is a guest (demo mode) */
+function isGuestUser(userId: string): boolean {
+  return userId.startsWith("guest-");
+}
+
 export function useSensorRanges(userId: string, deviceId: string) {
   const [ranges, setRanges] = useState<SensorRanges>(DEFAULT_RANGES);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,9 +66,20 @@ export function useSensorRanges(userId: string, deviceId: string) {
   const rangesRef = useRef<SensorRanges>(DEFAULT_RANGES);
   rangesRef.current = ranges;
 
+  // ── Skip Firebase for guest users ──────────────────────────────
+  if (isGuestUser(userId)) {
+    return {
+      ranges: DEFAULT_RANGES,
+      updateRange: async () => {},
+      updateRanges: async () => {},
+      resetToDefaults: async () => {},
+      isLoading: false,
+    };
+  }
+
   // ── Load + listen to RTDB ──────────────────────────────────────
   useEffect(() => {
-    if (!userId || !deviceId) return;
+    if (!userId || !deviceId || isGuestUser(userId)) return;
     setIsLoading(true);
     const dbRef = sensorRangesRef(userId, deviceId);
 

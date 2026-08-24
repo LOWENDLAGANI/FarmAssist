@@ -8,6 +8,7 @@
  *  • Mobile (<768px): Top bar + content + bottom tab bar
  *
  * All data is scoped per-user via Firebase Auth UID.
+ * Supports guest mode with simulated data for presentations.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -16,7 +17,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "./AuthProvider";
 import { useTelemetry } from "@/hooks/useTelemetry";
-import { useDeviceId } from "@/hooks/useDeviceId";
+import { useAppTheme } from "./ThemeProvider";
 import { useSensorRanges } from "@/hooks/useSensorRanges";
 import { useLoggingSession } from "@/hooks/useLoggingSession";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
@@ -35,10 +36,12 @@ import RecommendationPanel from "./RecommendationPanel";
 import ErrorDialog from "./ErrorDialog";
 import DeviceMismatchBanner from "./DeviceMismatchBanner";
 import OwnershipDeniedOverlay from "./OwnershipDeniedOverlay";
+import GuestModeBanner from "./GuestModeBanner";
 import NotificationsPage from "./pages/NotificationsPage";
 import CameraPage from "./pages/CameraPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
+import ControlPage from "./pages/ControlPage";
 
 /** Ordered list of sensor keys displayed in the card grid. */
 const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light"];
@@ -48,14 +51,22 @@ const STAGGER_CLASSES = ["stagger-1", "stagger-2", "stagger-3", "stagger-4"];
 
 export default function Dashboard() {
   const isMobile = useIsMobile();
-  const { user } = useAuth();
+  const {
+    user,
+    isGuest,
+    guestLatest,
+    guestChartHistory,
+    guestStatus,
+    guestLastUpdated,
+    guestDeviceId,
+  } = useAuth();
   const userId = user?.uid ?? "";
 
   // ── Navigation state ──────────────────────────────────────
   const [activePage, setActivePage] = useState("dashboard");
 
-  // ── Device pairing ────────────────────────────────────────
-  const { deviceId, setDevice } = useDeviceId();
+  // ── Device pairing (synced to Firebase via ThemeProvider) ──
+  const { deviceId, setDeviceId: setDevice } = useAppTheme();
 
   // ── Device-account linkage validation ──────────────────────
   const {
@@ -67,13 +78,14 @@ export default function Dashboard() {
   // ── Auto-navigate to Settings on first mismatch/unregistered ─
   const hasRedirectedRef = useRef(false);
   useEffect(() => {
+    if (isGuest) return; // Skip validation in guest mode
     if (deviceValidationLoading) return;
     if (hasRedirectedRef.current) return;
     if (deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered") {
       hasRedirectedRef.current = true;
       setActivePage("settings");
     }
-  }, [deviceValidationLoading, deviceLinkStatus]);
+  }, [deviceValidationLoading, deviceLinkStatus, isGuest]);
 
   // ── Logging session management (user-scoped) ──────────────
   const {
@@ -92,8 +104,6 @@ export default function Dashboard() {
   } = useLoggingSession(userId, deviceId);
 
   // ── Real-time telemetry from Firebase (user-scoped) ─────────
-  // Pass writeToSession as callback — called on every new reading
-  // when a session is active
   const { latest, chartHistory, isLoading, status, error, lastUpdated } =
     useTelemetry(
       userId,
@@ -101,6 +111,13 @@ export default function Dashboard() {
       undefined,
       activeSession ? writeToSession : undefined
     );
+
+  // ── Use guest data if in guest mode ─────────────────────
+  const effectiveLatest = isGuest ? guestLatest : latest;
+  const effectiveChartHistory = isGuest ? guestChartHistory : chartHistory;
+  const effectiveStatus = isGuest ? guestStatus : status;
+  const effectiveLastUpdated = isGuest ? guestLastUpdated : lastUpdated;
+  const effectiveDeviceId = isGuest ? guestDeviceId : deviceId;
 
   // ── User-configurable sensor ranges (user-scoped) ─────────
   const {
@@ -124,19 +141,20 @@ export default function Dashboard() {
   useCriticalAlerts({
     userId,
     deviceId,
-    latest,
+    latest: effectiveLatest,
     ranges,
-    status,
+    status: effectiveStatus,
     createNotification,
   });
 
   // ── Auto-request FCM permission on mount ───────────────────
   const fcmRequestedRef = useRef(false);
   useEffect(() => {
+    if (isGuest) return; // Skip FCM in guest mode
     if (!userId || fcmRequestedRef.current) return;
     fcmRequestedRef.current = true;
     requestPermission(userId);
-  }, [userId, requestPermission]);
+  }, [userId, requestPermission, isGuest]);
 
   // ── Error dialog state ─────────────────────────────────────
   const [showError, setShowError] = useState(false);
@@ -150,13 +168,13 @@ export default function Dashboard() {
 
   // ── Recommendations (uses configurable ranges) ─────────────
   const recommendations = useMemo(() => {
-    if (!latest) return [];
-    return generateRecommendations(latest, ranges);
-  }, [latest, ranges]);
+    if (!effectiveLatest) return [];
+    return generateRecommendations(effectiveLatest, ranges);
+  }, [effectiveLatest, ranges]);
 
   // ── Sensor values map for cards ──────────────────────────
   const sensorValues = useMemo(() => {
-    if (!latest)
+    if (!effectiveLatest)
       return {
         temperature: null,
         moisture: null,
@@ -164,25 +182,28 @@ export default function Dashboard() {
         light: null,
       } as Record<SensorKey, number | null>;
     return {
-      temperature: latest.temperature,
-      moisture: latest.moisture,
-      waterLevel: latest.waterLevel,
-      light: latest.light,
+      temperature: effectiveLatest.temperature,
+      moisture: effectiveLatest.moisture,
+      waterLevel: effectiveLatest.waterLevel,
+      light: effectiveLatest.light,
     };
-  }, [latest]);
+  }, [effectiveLatest]);
+
+  // Guest mode is always "linked" and "live"
+  const effectiveDeviceLinkStatus = isGuest ? "linked" as const : deviceLinkStatus;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#060e1a] md:flex-row">
       {/* ── Sidebar (desktop only; visibility is controlled by CSS) ── */}
-      <Sidebar activePage={activePage} onNavigate={setActivePage} settingsAlert={deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered"} />
+      <Sidebar activePage={activePage} onNavigate={setActivePage} settingsAlert={!isGuest && (effectiveDeviceLinkStatus === "taken" || effectiveDeviceLinkStatus === "unregistered")} />
 
       {/* ── Main content area ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* ── Top Bar ── */}
         <TopBar
-          status={status}
-          lastUpdated={lastUpdated}
-          deviceId={deviceId}
+          status={effectiveStatus}
+          lastUpdated={effectiveLastUpdated}
+          deviceId={effectiveDeviceId}
           notifications={notifications}
           unreadCount={unreadCount}
           onMarkRead={(id) => markRead(userId, id)}
@@ -191,18 +212,21 @@ export default function Dashboard() {
 
         {/* ── Scrollable content ── */}
         <main className="relative flex-1 overflow-y-auto p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-6">
-          {/* Ownership denied overlay */}
-          {deviceLinkStatus === "taken" && activePage !== "settings" && (
+          {/* Guest Mode Banner */}
+          <GuestModeBanner />
+
+          {/* Ownership denied overlay - skip in guest mode */}
+          {!isGuest && effectiveDeviceLinkStatus === "taken" && activePage !== "settings" && (
             <OwnershipDeniedOverlay
-              deviceId={deviceId}
+              deviceId={effectiveDeviceId}
               currentUserUid={userId}
               registryInfo={registryInfo}
               onGoToSettings={() => setActivePage("settings")}
             />
           )}
 
-          {/* Loading state */}
-          {isLoading && (
+          {/* Loading state - skip in guest mode */}
+          {!isGuest && isLoading && (
             <div className="mb-4 flex items-center gap-2 rounded-xl border border-cyan-900/30 bg-[#0c1a2e] p-3 sm:mb-6 sm:p-4 animate-fade-in">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
               <span className="text-sm text-slate-400">
@@ -211,16 +235,18 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Device linkage mismatch banner */}
-          <DeviceMismatchBanner
-            status={deviceLinkStatus}
-            currentDeviceId={deviceId}
-            currentUserUid={userId}
-            registryInfo={registryInfo}
-          />
+          {/* Device linkage mismatch banner - skip in guest mode */}
+          {!isGuest && (
+            <DeviceMismatchBanner
+              status={effectiveDeviceLinkStatus}
+              currentDeviceId={effectiveDeviceId}
+              currentUserUid={userId}
+              registryInfo={registryInfo}
+            />
+          )}
 
-          {/* Error state — banner for minor, dialog for critical */}
-          {error && (
+          {/* Error state — banner for minor, dialog for critical - skip in guest mode */}
+          {!isGuest && error && (
             <>
               <div
                 onClick={() => setShowError(true)}
@@ -258,13 +284,20 @@ export default function Dashboard() {
               <div className="mb-6 sm:mb-8 animate-slide-up stagger-4">
                 <ChartSection
                   activeSensor={activeSensor}
-                  history={chartHistory}
+                  history={effectiveChartHistory}
                 />
               </div>
 
               <div className="animate-slide-up stagger-5">
                 <RecommendationPanel recommendations={recommendations} />
               </div>
+            </div>
+          )}
+
+          {/* ── Control page ── */}
+          {activePage === "control" && (
+            <div className="animate-fade-in">
+              <ControlPage />
             </div>
           )}
 
@@ -310,9 +343,9 @@ export default function Dashboard() {
           {activePage === "settings" && (
             <div className="animate-fade-in">
               <SettingsPage
-                status={status}
-                lastUpdated={lastUpdated}
-                deviceId={deviceId}
+                status={effectiveStatus}
+                lastUpdated={effectiveLastUpdated}
+                deviceId={effectiveDeviceId}
                 onDeviceChange={setDevice}
                 sensorRanges={ranges}
                 onRangesSave={updateRanges}
@@ -325,7 +358,7 @@ export default function Dashboard() {
         </main>
 
         {/* ── Bottom Nav (mobile only; visibility is controlled by CSS) ── */}
-        <BottomNav activePage={activePage} onNavigate={setActivePage} settingsAlert={deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered"} />
+        <BottomNav activePage={activePage} onNavigate={setActivePage} settingsAlert={!isGuest && (effectiveDeviceLinkStatus === "taken" || effectiveDeviceLinkStatus === "unregistered")} />
       </div>
     </div>
   );

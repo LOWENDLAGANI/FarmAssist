@@ -114,7 +114,7 @@ function generateCustomThemeStyles(config: CustomThemeConfig): string {
  * on <html>, updating CSS variables for custom themes, and updating
  * the CSS `color-scheme` meta.
  */
-function applyTheme(theme: Theme, customConfig?: CustomThemeConfig) {
+export function applyTheme(theme: Theme, customConfig?: CustomThemeConfig) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
 

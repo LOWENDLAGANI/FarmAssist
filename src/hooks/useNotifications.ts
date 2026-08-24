@@ -43,14 +43,31 @@ export interface NotificationsResult {
   markAllRead: (userId: string) => Promise<void>;
 }
 
+/** Check if the user is a guest (demo mode) */
+function isGuestUser(userId: string): boolean {
+  return userId.startsWith("guest-");
+}
+
 export function useNotifications(userId: string): NotificationsResult {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  // ── Skip Firebase for guest users ──────────────────────────
+  if (isGuestUser(userId)) {
+    return {
+      notifications: [],
+      unreadCount: 0,
+      isLoading: false,
+      createNotification: async () => {},
+      markRead: async () => {},
+      markAllRead: async () => {},
+    };
+  }
+
   // ── Listen to notifications ────────────────────────────────
   useEffect(() => {
-    if (!userId) {
+    if (!userId || isGuestUser(userId)) {
       setIsLoading(false);
       return;
     }

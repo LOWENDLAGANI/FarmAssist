@@ -4,6 +4,7 @@
  * Firebase configuration, authentication, and Realtime Database helpers.
  *
  * RTDB paths used by this app (per-user isolation):
+ *   • users/{uid}/settings                     — synced user preferences
  *   • users/{uid}/devices/{deviceId}/latest    — live sensor data
  *   • users/{uid}/devices/{deviceId}/history   — chart history
  *   • users/{uid}/devices/{deviceId}/ranges    — sensor thresholds
@@ -127,6 +128,22 @@ export function sessionDataRef(userId: string, sessionId: string, deviceId?: str
 export function sessionRef(userId: string, sessionId: string, deviceId?: string): DatabaseReference {
   const id = deviceId ?? getDeviceId();
   return ref(db, `users/${userId}/devices/${id}/sessions/${sessionId}`);
+}
+
+// ── User Settings ──────────────────────────────────────────
+
+/**
+ * Reference to the synced user settings node.
+ * Path: users/{uid}/settings
+ *
+ * Shape: {
+ *   deviceId: string,
+ *   theme: string,
+ *   customTheme: CustomThemeConfig | null,
+ * }
+ */
+export function userSettingsRef(userId: string): DatabaseReference {
+  return ref(db, `users/${userId}/settings`);
 }
 
 // ── Rover Ownership Registry ─────────────────────────────────

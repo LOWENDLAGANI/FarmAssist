@@ -1,8 +1,8 @@
 /**
  * LoginPage.tsx
  * ─────────────────────────────────────────────────────────────────
- * Sign-in page with Google authentication.
- * Displays a centered card with the FarmAssist logo and sign-in button.
+ * Sign-in page with Google authentication and Guest mode.
+ * Displays a centered card with the FarmAssist logo and sign-in options.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -10,10 +10,10 @@
 
 import { useState } from "react";
 import { useAuth } from "./AuthProvider";
-import { Sprout, Loader2 } from "lucide-react";
+import { Sprout, Loader2, User, Zap } from "lucide-react";
 
 export default function LoginPage() {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, signInAsGuest } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
 
@@ -32,14 +32,18 @@ export default function LoginPage() {
     }
   };
 
+  const handleGuestSignIn = () => {
+    signInAsGuest();
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#060e1a] px-4">
       <div className="w-full max-w-sm">
         {/* Card */}
-        <div className="rounded-3xl border border-cyan-900/30 bg-[#0c1a2e] p-8 shadow-2xl shadow-cyan-950/50">
+        <div className="rounded-3xl border border-cyan-900/30 bg-[#0c1a2e] p-8 shadow-2xl shadow-cyan-950/50 animate-scale-in">
           {/* Logo */}
           <div className="mb-8 flex flex-col items-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10 animate-float">
               <Sprout className="h-8 w-8 text-cyan-400" />
             </div>
             <h1 className="text-2xl font-bold text-white">FarmAssist</h1>
@@ -52,7 +56,7 @@ export default function LoginPage() {
           <button
             onClick={handleSignIn}
             disabled={signingIn}
-            className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-md transition-all hover:bg-gray-50 hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-md transition-all hover:bg-gray-50 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {signingIn ? (
               <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
@@ -78,6 +82,37 @@ export default function LoginPage() {
             )}
             {signingIn ? "Signing in..." : "Sign in with Google"}
           </button>
+
+          {/* Divider */}
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-cyan-900/30" />
+            <span className="text-xs text-slate-500">or</span>
+            <div className="h-px flex-1 bg-cyan-900/30" />
+          </div>
+
+          {/* Guest Sign-In Button */}
+          <button
+            onClick={handleGuestSignIn}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm font-medium text-cyan-400 transition-all hover:bg-cyan-500/20 hover:shadow-lg hover:shadow-cyan-500/10 hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <User className="h-5 w-5" />
+            Sign in as Guest
+          </button>
+
+          {/* Guest Mode Info */}
+          <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-950/20 p-3">
+            <div className="flex items-start gap-2">
+              <Zap className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs text-amber-400 font-medium">
+                  Guest Mode
+                </p>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  This account is using simulated sensor data.
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* Error */}
           {error && (

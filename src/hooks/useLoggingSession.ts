@@ -58,6 +58,34 @@ function autoName(): string {
  * @param deviceId - The device ID to manage sessions for
  * @returns        - sessions, activeSession, start, stop, rename, delete, etc.
  */
+/** Check if the user is a guest (demo mode) */
+function isGuestUser(userId: string): boolean {
+  return userId.startsWith("guest-");
+}
+
+/** Empty session handlers for guest mode */
+const EMPTY_SESSION_HANDLERS = {
+  sessions: [],
+  activeSession: null,
+  isLoading: false,
+  startSession: async () => ({
+    id: "guest-session",
+    name: "Demo Session",
+    notes: "",
+    startDate: Date.now(),
+    endDate: null,
+    dataCount: 0,
+  }),
+  stopSession: async () => {},
+  renameSession: async () => {},
+  updateNotes: async () => {},
+  deleteSession: async () => {},
+  loadSessionData: async () => [],
+  subscribeToSessionData: () => () => {},
+  writeToSession: async () => {},
+  exportSessionCSV: async () => {},
+};
+
 export function useLoggingSession(userId: string, deviceId: string) {
   const [sessions, setSessions] = useState<LoggingSession[]>([]);
   const [activeSession, setActiveSession] = useState<LoggingSession | null>(null);
@@ -67,9 +95,14 @@ export function useLoggingSession(userId: string, deviceId: string) {
   const activeSessionRef = useRef<LoggingSession | null>(null);
   activeSessionRef.current = activeSession;
 
+  // ── Skip Firebase for guest users ──────────────────────────
+  if (isGuestUser(userId)) {
+    return EMPTY_SESSION_HANDLERS;
+  }
+
   // ── Load sessions from RTDB ─────────────────────────────────
   useEffect(() => {
-    if (!userId || !deviceId) return;
+    if (!userId || !deviceId || isGuestUser(userId)) return;
     setIsLoading(true);
 
     const dbRef = sessionsRef(userId, deviceId);
