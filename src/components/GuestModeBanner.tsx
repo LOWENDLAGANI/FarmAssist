@@ -27,7 +27,7 @@ export default function GuestModeBanner() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-amber-400">
-              Demo Mode Active
+              Demo Mode
             </span>
             <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-semibold text-amber-400 uppercase tracking-wide">
               Guest
