@@ -78,7 +78,7 @@ export default function ErrorDialog({ error, onClose }: ErrorDialogProps) {
       />
 
       {/* Dialog */}
-      <div className="relative w-full max-w-md rounded-2xl border border-red-500/30 bg-[#0c1a2e] p-0 shadow-2xl shadow-red-950/50 overflow-hidden">
+      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-red-500/30 bg-[#0c1a2e] p-0 shadow-2xl shadow-red-950/50">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-red-900/30 bg-red-950/30 px-6 py-4">
           <div className="flex items-center gap-3">

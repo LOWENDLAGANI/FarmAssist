@@ -214,7 +214,7 @@ body {
 
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
 }
 .animate-fade-in {
   animation: fade-in 0.4s ease-out forwards;
@@ -225,7 +225,7 @@ body {
    sidebar's 200ms width transition. */
 @keyframes content-reflow {
   from { opacity: 0.35; transform: translateX(-8px); }
-  to { opacity: 1; transform: translateX(0); }
+  to { opacity: 1; transform: none; }
 }
 .animate-content-reflow {
   animation: content-reflow 0.2s ease-out forwards;
@@ -233,7 +233,7 @@ body {
 
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
 }
 .animate-slide-up {
   animation: slide-up 0.5s ease-out forwards;
@@ -241,7 +241,7 @@ body {
 
 @keyframes slide-down {
   from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
 }
 .animate-slide-down {
   animation: slide-down 0.5s ease-out forwards;
@@ -249,7 +249,7 @@ body {
 
 @keyframes scale-in {
   from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  to { opacity: 1; transform: none; }
 }
 .animate-scale-in {
   animation: scale-in 0.3s ease-out forwards;

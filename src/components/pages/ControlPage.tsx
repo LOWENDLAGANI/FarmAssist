@@ -147,7 +147,7 @@ function ConfirmDialog({ action, onConfirm, onCancel }: ConfirmDialogProps) {
       onClick={onCancel}
     >
       <div
-        className="mx-4 w-full max-w-sm rounded-2xl border border-cyan-900/30 bg-[#0c1a2e] p-6 shadow-2xl animate-scale-in"
+        className="mx-4 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-cyan-900/30 bg-[#0c1a2e] p-6 shadow-2xl animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Icon & Title */}
@@ -209,7 +209,7 @@ function ActionFeedback({ action, onDismiss }: ActionFeedbackProps) {
       onClick={onDismiss}
     >
       <div
-        className="mx-4 w-full max-w-sm rounded-2xl border border-cyan-900/30 bg-[#0c1a2e] p-6 shadow-2xl animate-scale-in"
+        className="mx-4 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-cyan-900/30 bg-[#0c1a2e] p-6 shadow-2xl animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex flex-col items-center text-center">

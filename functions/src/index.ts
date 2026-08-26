@@ -5,6 +5,7 @@
  * critical events. These run even when the user's browser is closed.
  *
  * Functions:
+ *  • askAssistant   — callable; Gemini-powered in-app help assistant
  *  • onSensorAlert  — triggers on telemetry write, checks thresholds
  *  • onForcePair    — triggers on rover_registry update
  * ─────────────────────────────────────────────────────────────────
@@ -154,4 +155,154 @@ export const onForcePair = functions.database
         functions.logger.error("Force-pair push failed:", err);
       }
     }
+  });
+
+// ── AI Help Assistant (Gemini) ──────────────────────────────────
+/**
+ * Callable function that powers the in-app assistant widget.
+ * Requires the `GEMINI_API_KEY` secret:
+ *   firebase functions:secrets:set GEMINI_API_KEY
+ *
+ * Request : { message: string, history?: { role: "user"|"model", text: string }[] }
+ * Response: { reply: string }
+ * Auth    : required (context.auth enforced below)
+ */
+
+const ASSISTANT_SYSTEM_PROMPT = `You are "Buddy", the friendly FarmAssist helper mascot.
+FarmAssist is an IoT farming dashboard where users pair ESP32-powered "Rovers" (sensor units) that report temperature, soil moisture, water level, and light readings to Firebase in real time.
+
+What you know about the app:
+• Pairing: users claim a Rover by entering its device ID (e.g. "esp32-farm-001"); ownership is tracked in a shared registry, and pairing can be force-transferred if a Rover is already claimed.
+• Sensors: each Rover streams live temperature (°C), soil moisture (%), water level (%), and light (lux). Users configure optimal min/max ranges per sensor.
+• Alerts: when a reading leaves its optimal range, the app records a notification and can send a push notification (with cooldown), even when the browser is closed.
+• History: telemetry is charted over time, and users can run logging sessions to capture data points for review.
+• Customization: multiple dashboard themes (Midnight, Forest, Sunset, Midnight Blue, Light, Custom) with per-user settings synced across devices.
+• Programme: some accounts track a programme phase (e.g. "Lab I - Online Phase") with start/end dates.
+
+Rules:
+• Stay warm, upbeat and concise (2–5 sentences unless steps are needed).
+• Only answer questions about FarmAssist, its features, IoT/farming basics related to the sensors, or general troubleshooting of the app and Rovers.
+• If asked about anything unrelated (coding, other products, opinions), politely say it's outside your scope and steer back to helping with FarmAssist.
+• Never invent features that don't exist, and never share or request passwords or personal data.
+• If you can't determine something account-specific (like why one particular Rover is offline), give the most likely causes and practical next steps.`;
+
+/** Per-uid sliding-window rate limit to protect the Gemini quota. */
+const ASSISTANT_RATE_LIMIT = { maxCalls: 20, windowMs: 60 * 1000 };
+const assistantRateMap = new Map<string, number[]>();
+
+interface AssistantTurn {
+  role: "user" | "model";
+  text: string;
+}
+
+export const askAssistant = functions
+  .runWith({ secrets: ["GEMINI_API_KEY"] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "Sign in to chat with the assistant."
+      );
+    }
+    const uid: string = context.auth.uid;
+
+    const message =
+      typeof data?.message === "string" ? data.message.trim() : "";
+    if (!message || message.length > 1000) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Message must be between 1 and 1000 characters."
+      );
+    }
+
+    // Sanitize caller-supplied history (max 12 turns).
+    const history: AssistantTurn[] = Array.isArray(data?.history)
+      ? (data.history as unknown[])
+          .filter(
+            (t): t is AssistantTurn =>
+              !!t &&
+              typeof (t as AssistantTurn).text === "string" &&
+              ((t as AssistantTurn).role === "user" ||
+                (t as AssistantTurn).role === "model")
+          )
+          .slice(-12)
+          .map((t) => ({ role: t.role, text: t.text.slice(0, 2000) }))
+      : [];
+
+    // Rate limit (per instance; sufficient as a soft guardrail).
+    const now = Date.now();
+    const stamps = (assistantRateMap.get(uid) ?? []).filter(
+      (t) => now - t < ASSISTANT_RATE_LIMIT.windowMs
+    );
+    if (stamps.length >= ASSISTANT_RATE_LIMIT.maxCalls) {
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "You're sending messages too fast — take a short breather! 🌱"
+      );
+    }
+    stamps.push(now);
+    assistantRateMap.set(uid, stamps);
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      functions.logger.error("GEMINI_API_KEY secret is not set");
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The assistant isn't configured yet. Try again later."
+      );
+    }
+
+    const model = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+    const contents = [
+      ...history.map((t) => ({
+        role: t.role,
+        parts: [{ text: t.text }],
+      })),
+      { role: "user", parts: [{ text: message }] },
+    ];
+
+    let reply: string | undefined;
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: ASSISTANT_SYSTEM_PROMPT }] },
+            contents,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 512,
+            },
+          }),
+        }
+      );
+      if (!res.ok) {
+        functions.logger.error("Gemini HTTP error", res.status, await res.text());
+        throw new Error(`Gemini responded ${res.status}`);
+      }
+      const json = (await res.json()) as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+      };
+      reply = json.candidates?.[0]?.content?.parts
+        ?.map((p) => p.text ?? "")
+        .join("")
+        .trim();
+    } catch (err) {
+      functions.logger.error("Gemini call failed:", err);
+      throw new functions.https.HttpsError(
+        "internal",
+        "The assistant had trouble responding. Please try again."
+      );
+    }
+
+    if (!reply) {
+      throw new functions.https.HttpsError(
+        "internal",
+        "The assistant couldn't generate a reply. Please try rephrasing."
+      );
+    }
+
+    return { reply };
   });

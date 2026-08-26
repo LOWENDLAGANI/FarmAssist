@@ -102,7 +102,7 @@ export default function DeviceMismatchBanner({
 
           {/* Dialog */}
           <div
-            className={`relative w-full max-w-md rounded-2xl border bg-[#0c1a2e] p-0 shadow-2xl overflow-hidden ${
+            className={`relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border bg-[#0c1a2e] p-0 shadow-2xl ${
               isTaken
                 ? "border-red-500/30 shadow-red-950/50"
                 : "border-cyan-500/30 shadow-cyan-950/50"

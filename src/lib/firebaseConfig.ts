@@ -47,6 +47,9 @@ export const db: Database = getDatabase(app);
 /** Initialized Firebase Auth instance. */
 export const auth: Auth = getAuth(app);
 
+/** Initialized Firebase App instance (for other SDKs like Functions). */
+export { app };
+
 // ── Default device configuration ──────────────────────────────────
 const DEFAULT_DEVICE_ID = "esp32-farm-001";
 

@@ -43,6 +43,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import CameraPage from "./pages/CameraPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
+import AccountPage from "./pages/AccountPage";
 import ControlPage from "./pages/ControlPage";
 
 /** Ordered list of sensor keys displayed in the card grid. */
@@ -418,6 +419,13 @@ export default function Dashboard() {
                 onSubscribeSessionData={subscribeToSessionData}
                 onExportCSV={exportSessionCSV}
               />
+            </div>
+          )}
+
+          {/* ── Account page ── */}
+          {activePage === "account" && (
+            <div className="animate-fade-in">
+              <AccountPage />
             </div>
           )}
 

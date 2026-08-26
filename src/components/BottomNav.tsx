@@ -14,6 +14,7 @@ import {
   Clock,
   Settings,
   SlidersHorizontal,
+  CircleUserRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -28,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { icon: SlidersHorizontal, label: "Control", id: "control" },
   { icon: Bell, label: "Alerts", id: "notifications" },
   { icon: Clock, label: "History", id: "history" },
+  { icon: CircleUserRound, label: "Account", id: "account" },
   { icon: Settings, label: "Settings", id: "settings" },
 ];
 
