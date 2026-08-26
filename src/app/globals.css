@@ -220,6 +220,17 @@ body {
   animation: fade-in 0.4s ease-out forwards;
 }
 
+/* Plays on the main content area when the sidebar collapses/expands,
+   so the reflow eases instead of snapping. Duration matches the
+   sidebar's 200ms width transition. */
+@keyframes content-reflow {
+  from { opacity: 0.35; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-content-reflow {
+  animation: content-reflow 0.2s ease-out forwards;
+}
+
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }

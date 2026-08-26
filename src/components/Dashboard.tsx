@@ -241,6 +241,10 @@ export default function Dashboard() {
   // Guest mode is always "linked" and "live"
   const effectiveDeviceLinkStatus = isGuest ? "linked" as const : deviceLinkStatus;
 
+  // Sidebar collapse → gently animate the main content reflow instead of snapping
+  const [contentReflowing, setContentReflowing] = useState(false);
+  const handleSidebarCollapsedChange = () => setContentReflowing(true);
+
   return (
     <>
       {backgroundMedia?.type === "video" && (
@@ -251,7 +255,7 @@ export default function Dashboard() {
       )}
       <div className="relative z-10 flex h-screen flex-col overflow-hidden md:flex-row">
       {/* ── Sidebar (desktop only; visibility is controlled by CSS) ── */}
-      <Sidebar activePage={activePage} onNavigate={setActivePage} settingsAlert={!isGuest && (effectiveDeviceLinkStatus === "taken" || effectiveDeviceLinkStatus === "unregistered")} />
+      <Sidebar activePage={activePage} onNavigate={setActivePage} settingsAlert={!isGuest && (effectiveDeviceLinkStatus === "taken" || effectiveDeviceLinkStatus === "unregistered")} onCollapsedChange={handleSidebarCollapsedChange} />
 
       {/* ── Main content area ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -267,7 +271,10 @@ export default function Dashboard() {
         />
 
         {/* ── Scrollable content ── */}
-        <main className="relative flex-1 overflow-y-auto p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-6">
+        <main
+          onAnimationEnd={() => setContentReflowing(false)}
+          className={`relative flex-1 overflow-y-auto p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-6 ${contentReflowing ? "animate-content-reflow" : ""}`}
+        >
           {/* Guest Mode Banner */}
           <GuestModeBanner />
 
