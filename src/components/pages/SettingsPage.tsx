@@ -24,6 +24,9 @@ import {
   AlertTriangle,
   X,
   Bell,
+  ImageIcon,
+  Upload,
+  Trash2,
 } from "lucide-react";
 import { useAppTheme } from "../ThemeProvider";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
@@ -52,6 +55,9 @@ interface SettingsPageProps {
     body: string,
     deviceId: string
   ) => Promise<void>;
+  backgroundMediaType: "image" | "video" | null;
+  onBackgroundUpload: (file: File) => void;
+  onBackgroundReset: () => void;
 }
 
 const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light"];
@@ -249,6 +255,9 @@ export default function SettingsPage({
   onRangesReset,
   userUID,
   onCreateNotification,
+  backgroundMediaType,
+  onBackgroundUpload,
+  onBackgroundReset,
 }: SettingsPageProps) {
   const { theme, setTheme, themes, customTheme, setCustomTheme, applyCustomTheme } = useAppTheme();
   const { registerDevice, forceRegisterDevice, unlinkDevice, status: deviceLinkStatus, registryInfo } = useDeviceValidation(userUID, deviceId);
@@ -438,6 +447,52 @@ export default function SettingsPage({
               #Here is your account UID: &quot;{userUID}&quot;
             </code>
           </div>
+        </div>
+
+        {/* Dashboard Background */}
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-3">
+          <div className="mb-3 flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/15">
+              <ImageIcon className="h-4 w-4 text-cyan-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Dashboard Background</h3>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Upload a photo or a muted video to use behind the dashboard.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-2.5 text-sm font-medium text-cyan-400 transition-all hover:bg-cyan-500/30">
+              <Upload className="h-4 w-4" />
+              Upload {backgroundMediaType ? "new media" : "photo or video"}
+              <input
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) onBackgroundUpload(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            {backgroundMediaType && (
+              <button
+                type="button"
+                onClick={onBackgroundReset}
+                className="flex items-center gap-2 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2.5 text-sm text-slate-400 transition-all hover:bg-[#0f2240] hover:text-white"
+              >
+                <Trash2 className="h-4 w-4" />
+                Use default image
+              </button>
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-slate-500">
+            {backgroundMediaType
+              ? `Custom ${backgroundMediaType} active. It is saved in this browser.`
+              : "Using the default background image."}
+          </p>
         </div>
 
         {/* Device Pairing */}

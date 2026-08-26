@@ -27,12 +27,14 @@ import { useFCM } from "@/hooks/useFCM";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { SensorKey } from "@/types/telemetry";
 import { generateRecommendations } from "@/lib/recommendations";
+import { useProgramme } from "@/hooks/useProgramme";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import BottomNav from "./BottomNav";
 import SensorCard from "./SensorCard";
 import ChartSection from "./ChartSection";
 import RecommendationPanel from "./RecommendationPanel";
+import WelcomeBanner from "./WelcomeBanner";
 import ErrorDialog from "./ErrorDialog";
 import DeviceMismatchBanner from "./DeviceMismatchBanner";
 import OwnershipDeniedOverlay from "./OwnershipDeniedOverlay";
@@ -64,6 +66,50 @@ export default function Dashboard() {
 
   // ── Navigation state ──────────────────────────────────────
   const [activePage, setActivePage] = useState("dashboard");
+  const [backgroundMedia, setBackgroundMedia] = useState<{
+    type: "image" | "video";
+    url: string;
+  } | null>(null);
+
+  // Restore the background selected in this browser.
+  useEffect(() => {
+    const request = indexedDB.open("farmassist", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("settings");
+    request.onsuccess = () => {
+      const transaction = request.result.transaction("settings", "readonly");
+      const getRequest = transaction.objectStore("settings").get("backgroundMedia");
+      getRequest.onsuccess = () => {
+        const saved = getRequest.result as { type: "image" | "video"; blob: Blob } | undefined;
+        if (saved?.blob) setBackgroundMedia({ type: saved.type, url: URL.createObjectURL(saved.blob) });
+      };
+    };
+  }, []);
+
+  const saveBackgroundMedia = useCallback((file: File) => {
+    const type = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "image" : null;
+    if (!type) return;
+    setBackgroundMedia((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return { type, url: URL.createObjectURL(file) };
+    });
+    const request = indexedDB.open("farmassist", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("settings");
+    request.onsuccess = () => {
+      request.result.transaction("settings", "readwrite").objectStore("settings").put({ type, blob: file }, "backgroundMedia");
+    };
+  }, []);
+
+  const resetBackgroundMedia = useCallback(() => {
+    setBackgroundMedia((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+    const request = indexedDB.open("farmassist", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("settings");
+    request.onsuccess = () => {
+      request.result.transaction("settings", "readwrite").objectStore("settings").delete("backgroundMedia");
+    };
+  }, []);
 
   // ── Device pairing (synced to Firebase via ThemeProvider) ──
   const { deviceId, setDeviceId: setDevice } = useAppTheme();
@@ -166,6 +212,9 @@ export default function Dashboard() {
     setActiveSensor(key);
   }, []);
 
+  // ── Programme / phase data for the welcome banner ─────────
+  const { badges: programmeBadges } = useProgramme(userId);
+
   // ── Recommendations (uses configurable ranges) ─────────────
   const recommendations = useMemo(() => {
     if (!effectiveLatest) return [];
@@ -193,7 +242,14 @@ export default function Dashboard() {
   const effectiveDeviceLinkStatus = isGuest ? "linked" as const : deviceLinkStatus;
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#060e1a] md:flex-row">
+    <>
+      {backgroundMedia?.type === "video" && (
+        <video className="fixed inset-0 z-0 h-full w-full object-cover" src={backgroundMedia.url} autoPlay loop muted playsInline />
+      )}
+      {backgroundMedia?.type === "image" && (
+        <div className="fixed inset-0 z-0 bg-cover bg-center" style={{ backgroundImage: `url("${backgroundMedia.url}")` }} />
+      )}
+      <div className="relative z-10 flex h-screen flex-col overflow-hidden md:flex-row">
       {/* ── Sidebar (desktop only; visibility is controlled by CSS) ── */}
       <Sidebar activePage={activePage} onNavigate={setActivePage} settingsAlert={!isGuest && (effectiveDeviceLinkStatus === "taken" || effectiveDeviceLinkStatus === "unregistered")} />
 
@@ -266,6 +322,11 @@ export default function Dashboard() {
           {/* ── Dashboard page ── */}
           {activePage === "dashboard" && (
             <div className="animate-fade-in">
+              {/* ── Welcome hero banner ── */}
+              <div className="animate-slide-up">
+                <WelcomeBanner userName={user?.displayName ?? undefined} badges={programmeBadges} />
+              </div>
+
               <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 lg:grid-cols-4">
                 {SENSOR_KEYS.map((key, index) => (
                   <div key={key} className={`animate-slide-up ${STAGGER_CLASSES[index]}`}>
@@ -352,6 +413,9 @@ export default function Dashboard() {
                 onRangesReset={resetRanges}
                 userUID={userId}
                 onCreateNotification={createNotification}
+                backgroundMediaType={backgroundMedia?.type ?? null}
+                onBackgroundUpload={saveBackgroundMedia}
+                onBackgroundReset={resetBackgroundMedia}
               />
             </div>
           )}
@@ -360,6 +424,7 @@ export default function Dashboard() {
         {/* ── Bottom Nav (mobile only; visibility is controlled by CSS) ── */}
         <BottomNav activePage={activePage} onNavigate={setActivePage} settingsAlert={!isGuest && (effectiveDeviceLinkStatus === "taken" || effectiveDeviceLinkStatus === "unregistered")} />
       </div>
-    </div>
+      </div>
+    </>
   );
 }

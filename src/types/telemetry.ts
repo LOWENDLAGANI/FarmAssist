@@ -128,6 +128,12 @@ export interface Recommendation {
   sensor: SensorKey;
   message: string;
   icon: string;
+  /** Short explanation of why this matters — the AI's reasoning. */
+  analysis?: string;
+  /** Concrete next steps the user can take. */
+  actionSteps?: string[];
+  /** Confidence level for this recommendation (0–100). */
+  confidence?: number;
 }
 
 /** Rolling history buffer max size. */

@@ -169,7 +169,7 @@
 
 /* ── Base resets ────────────────────────────────────────────────── */
 body {
-  background: var(--background);
+  background: url("/background.jpg") center / cover no-repeat fixed;
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
