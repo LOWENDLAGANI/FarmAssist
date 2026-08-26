@@ -112,7 +112,7 @@ export default function Dashboard() {
   }, []);
 
   // ── Device pairing (synced to Firebase via ThemeProvider) ──
-  const { deviceId, setDeviceId: setDevice } = useAppTheme();
+  const { deviceId, setDeviceId: setDevice, backgroundBlur, setBackgroundBlurred } = useAppTheme();
 
   // ── Device-account linkage validation ──────────────────────
   const {
@@ -248,10 +248,24 @@ export default function Dashboard() {
   return (
     <>
       {backgroundMedia?.type === "video" && (
-        <video className="fixed inset-0 z-0 h-full w-full object-cover" src={backgroundMedia.url} autoPlay loop muted playsInline />
+        <video
+          className={`fixed inset-0 z-0 h-full w-full object-cover transition-[filter] duration-300 ${backgroundBlur ? "scale-105 blur-lg" : ""}`}
+          src={backgroundMedia.url}
+          autoPlay
+          loop
+          muted
+          playsInline
+        />
       )}
       {backgroundMedia?.type === "image" && (
-        <div className="fixed inset-0 z-0 bg-cover bg-center" style={{ backgroundImage: `url("${backgroundMedia.url}")` }} />
+        <div
+          className={`fixed inset-0 z-0 bg-cover bg-center transition-[filter] duration-300 ${backgroundBlur ? "scale-105 blur-lg" : ""}`}
+          style={{ backgroundImage: `url("${backgroundMedia.url}")` }}
+        />
+      )}
+      {/* No custom media → blur the default body background (public/background.jpg) */}
+      {backgroundBlur && !backgroundMedia && (
+        <div className="pointer-events-none fixed inset-0 z-0 backdrop-blur-lg" aria-hidden="true" />
       )}
       <div className="relative z-10 flex h-screen flex-col overflow-hidden md:flex-row">
       {/* ── Sidebar (desktop only; visibility is controlled by CSS) ── */}
@@ -423,6 +437,8 @@ export default function Dashboard() {
                 backgroundMediaType={backgroundMedia?.type ?? null}
                 onBackgroundUpload={saveBackgroundMedia}
                 onBackgroundReset={resetBackgroundMedia}
+                backgroundBlur={backgroundBlur}
+                onBackgroundBlurChange={setBackgroundBlurred}
               />
             </div>
           )}

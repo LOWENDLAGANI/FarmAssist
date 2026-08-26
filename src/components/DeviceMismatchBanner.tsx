@@ -187,10 +187,10 @@ export default function DeviceMismatchBanner({
                           2
                         </span>
                         <span>
-                          Go to{" "}
+                          Once unlinked, go to{" "}
                           <strong>Settings &gt; Rover ID</strong> and
                           click{" "}
-                          <strong>&quot;Force Pair&quot;</strong> to take
+                          <strong>&quot;Pair&quot;</strong> to claim
                           ownership
                         </span>
                       </li>

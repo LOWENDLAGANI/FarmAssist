@@ -283,28 +283,35 @@ export default function ControlPage() {
               key={action.id}
               type="button"
               onClick={() => handleActionClick(action)}
-              className={`group flex flex-col items-start rounded-2xl border p-5 text-left transition-all hover:scale-[1.02] active:scale-[0.98] animate-slide-up ${
+              className={`group relative flex flex-col items-start overflow-hidden rounded-2xl border p-5 text-left backdrop-blur-md transition-all hover:scale-[1.02] active:scale-[0.98] animate-slide-up bg-[#0c1a2e]/95 ${
                 action.destructive
-                  ? "border-red-500/20 bg-red-500/5 hover:border-red-500/40 hover:bg-red-500/10"
-                  : `${action.borderColor} ${action.bgColor} hover:border-opacity-60`
+                  ? "border-red-500/30"
+                  : action.borderColor
               }`}
               style={{ animationDelay: `${index * 0.05}s` }}
             >
+              {/* Colored tint over the solid panel — adapts to any background without going transparent */}
               <div
-                className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl ${action.bgColor}`}
-              >
-                <Icon className={`h-5 w-5 ${action.color}`} />
-              </div>
-              <h3 className="mb-1 text-sm font-bold text-white">{action.label}</h3>
-              <p className="text-xs leading-relaxed text-slate-400">
-                {action.description}
-              </p>
-              {action.destructive && (
-                <div className="mt-3 flex items-center gap-1.5 text-[10px] font-medium text-red-400">
-                  <AlertTriangle className="h-3 w-3" />
-                  Emergency action
+                className={`pointer-events-none absolute inset-0 transition-opacity duration-200 group-hover:opacity-50 ${action.bgColor}`}
+              />
+
+              <div className="relative">
+                <div
+                  className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl ${action.bgColor}`}
+                >
+                  <Icon className={`h-5 w-5 ${action.color}`} />
                 </div>
-              )}
+                <h3 className="mb-1 text-sm font-bold text-white">{action.label}</h3>
+                <p className="text-xs leading-relaxed text-slate-300">
+                  {action.description}
+                </p>
+                {action.destructive && (
+                  <div className="mt-3 flex items-center gap-1.5 text-[10px] font-medium text-red-400">
+                    <AlertTriangle className="h-3 w-3" />
+                    Emergency action
+                  </div>
+                )}
+              </div>
             </button>
           );
         })}

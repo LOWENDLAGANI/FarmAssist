@@ -111,7 +111,7 @@ export default function OwnershipDeniedOverlay({
                 3
               </span>
               <span>
-                Click <strong>&quot;Force Pair&quot;</strong> in Settings
+                Click <strong>&quot;Pair&quot;</strong> in Settings &gt; Rover ID
               </span>
             </li>
           </ol>

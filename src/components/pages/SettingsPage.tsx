@@ -58,6 +58,9 @@ interface SettingsPageProps {
   backgroundMediaType: "image" | "video" | null;
   onBackgroundUpload: (file: File) => void;
   onBackgroundReset: () => void;
+  /** Whether the dashboard background is blurred. */
+  backgroundBlur: boolean;
+  onBackgroundBlurChange: (blurred: boolean) => void;
 }
 
 const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light"];
@@ -258,17 +261,17 @@ export default function SettingsPage({
   backgroundMediaType,
   onBackgroundUpload,
   onBackgroundReset,
+  backgroundBlur,
+  onBackgroundBlurChange,
 }: SettingsPageProps) {
   const { theme, setTheme, themes, customTheme, setCustomTheme, applyCustomTheme } = useAppTheme();
-  const { registerDevice, forceRegisterDevice, unlinkDevice, status: deviceLinkStatus, registryInfo } = useDeviceValidation(userUID, deviceId);
+  const { registerDevice, unlinkDevice, status: deviceLinkStatus, registryInfo } = useDeviceValidation(userUID, deviceId);
   const [deviceInput, setDeviceInput] = useState(deviceId);
   const [saved, setSaved] = useState(false);
   const [pairFailed, setPairFailed] = useState(false);
   const [uidCopied, setUidCopied] = useState(false);
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
-  const [showForcePairConfirm, setShowForcePairConfirm] = useState(false);
   const [unlinked, setUnlinked] = useState(false);
-  const [forcePaired, setForcePaired] = useState(false);
   const [showCustomBuilder, setShowCustomBuilder] = useState(false);
 
   // ── Local editing state for ranges ──────────────────────────
@@ -288,13 +291,6 @@ export default function SettingsPage({
       setPairFailed(true);
       setTimeout(() => setPairFailed(false), 3000);
     }
-  };
-
-  const handleForcePair = async () => {
-    await forceRegisterDevice(userUID, deviceId);
-    setShowForcePairConfirm(false);
-    setForcePaired(true);
-    setTimeout(() => setForcePaired(false), 2000);
   };
 
   const handleRangeChange = (sensor: SensorKey, field: "optimalMin" | "optimalMax", value: number) => {
@@ -488,6 +484,31 @@ export default function SettingsPage({
               </button>
             )}
           </div>
+          {/* Blur toggle */}
+          <div className="mt-3 flex items-center justify-between gap-4 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-white">Blur background</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                Soften the background so dashboard content stays readable. On by default.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={backgroundBlur}
+              aria-label="Blur background"
+              onClick={() => onBackgroundBlurChange(!backgroundBlur)}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${
+                backgroundBlur ? "bg-cyan-500" : "bg-slate-700"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all duration-200 ${
+                  backgroundBlur ? "left-[1.375rem]" : "left-0.5"
+                }`}
+              />
+            </button>
+          </div>
           <p className="mt-2 text-[11px] text-slate-500">
             {backgroundMediaType
               ? `Custom ${backgroundMediaType} active. It is saved in this browser.`
@@ -561,15 +582,8 @@ export default function SettingsPage({
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-red-400" />
                 <p className="flex-1 text-[11px] text-red-400">
-                  Rover is paired to another account
+                  Rover is paired to another account — ask the owner to unlink it
                 </p>
-                <button
-                  onClick={() => setShowForcePairConfirm(true)}
-                  className="flex items-center gap-1 rounded-lg border border-amber-500/20 bg-amber-950/20 px-2.5 py-1 text-[10px] text-amber-400 transition-all hover:border-amber-500/40 hover:bg-amber-950/40 hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <AlertTriangle className="h-3 w-3" />
-                  Force Pair
-                </button>
               </div>
             )}
             {deviceLinkStatus === "unregistered" && (
@@ -587,7 +601,7 @@ export default function SettingsPage({
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-amber-400" />
                 <p className="text-[11px] text-amber-400">
-                  Rover is already paired to another account — use Force Pair
+                  Rover is already paired to another account — ask the owner to unlink it first
                 </p>
               </div>
             )}
@@ -599,63 +613,7 @@ export default function SettingsPage({
                 </p>
               </div>
             )}
-            {forcePaired && (
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-amber-400" />
-                <p className="text-[11px] text-amber-400">
-                  Ownership claimed — update the Rover&apos;s USER_UID
-                </p>
-              </div>
-            )}
           </div>
-
-          {/* Force Pair confirmation dialog */}
-          {showForcePairConfirm && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <div
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                onClick={() => setShowForcePairConfirm(false)}
-              />
-              <div className="relative w-full max-w-sm rounded-2xl border border-amber-500/30 bg-[#0c1a2e] p-0 shadow-2xl shadow-amber-950/50 overflow-hidden animate-scale-in">
-                <div className="flex items-center justify-between border-b border-amber-900/30 bg-amber-950/30 px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20">
-                      <AlertTriangle className="h-5 w-5 text-amber-400" />
-                    </div>
-                    <h3 className="text-base font-semibold text-white">Force Pair Rover</h3>
-                  </div>
-                  <button
-                    onClick={() => setShowForcePairConfirm(false)}
-                    className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="px-6 py-5 space-y-3">
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    This will take ownership of Rover <span className="font-mono text-cyan-400">{deviceId}</span> from the other account.
-                  </p>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    The previous owner will lose access to live data. You must also update the Rover&apos;s <code className="font-mono text-cyan-400">USER_UID</code> via its config portal.
-                  </p>
-                </div>
-                <div className="flex items-center justify-end gap-3 border-t border-cyan-900/20 px-6 py-4">
-                  <button
-                    onClick={() => setShowForcePairConfirm(false)}
-                    className="rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2 text-sm text-slate-400 transition-all hover:bg-[#0f2240] hover:text-white hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleForcePair}
-                    className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-400 transition-all hover:bg-amber-500/30 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    Force Pair
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Unlink confirmation dialog */}
           {showUnlinkConfirm && (

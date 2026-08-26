@@ -25,7 +25,6 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Bell,
@@ -37,6 +36,7 @@ import {
   PanelLeftOpen,
   type LucideIcon,
 } from "lucide-react";
+import { useAppTheme } from "./ThemeProvider";
 
 interface NavItem {
   icon: LucideIcon;
@@ -52,41 +52,22 @@ const NAV_ITEMS: NavItem[] = [
   { icon: Settings, label: "Settings", id: "settings" },
 ];
 
-const COLLAPSED_KEY = "agrovator-sidebar-collapsed";
-
 interface SidebarProps {
   activePage: string;
   onNavigate: (page: string) => void;
   /** Show a pulsing alert dot on the Settings item. */
   settingsAlert?: boolean;
-  /** Notifies the parent whenever the collapsed state changes (including restored-on-load). */
+  /** Notifies the parent whenever the collapsed state changes (for content reflow animation). */
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
 export default function Sidebar({ activePage, onNavigate, settingsAlert, onCollapsedChange }: SidebarProps) {
-  // Start expanded; restore the saved preference after mount (avoids hydration mismatch)
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem(COLLAPSED_KEY) === "1") {
-        setCollapsed(true);
-        onCollapsedChange?.(true);
-      }
-    } catch {
-      /* storage unavailable — stay expanded */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Collapse state lives in the synced user settings (Firebase + localStorage fallback)
+  const { sidebarCollapsed: collapsed, setSidebarCollapsed } = useAppTheme();
 
   const toggleCollapsed = () => {
     const next = !collapsed;
-    setCollapsed(next);
-    try {
-      window.localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
+    setSidebarCollapsed(next);
     onCollapsedChange?.(next);
   };
 

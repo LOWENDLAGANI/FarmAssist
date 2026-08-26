@@ -30,6 +30,12 @@ interface ThemeContextValue {
   deviceId: string;
   /** Update device ID (syncs to Firebase + localStorage). */
   setDeviceId: (id: string) => void;
+  /** Synced sidebar collapse preference (icon rail vs wide view). */
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  /** Synced dashboard background blur preference (default ON). */
+  backgroundBlur: boolean;
+  setBackgroundBlurred: (blurred: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
@@ -49,6 +55,10 @@ const ThemeContext = createContext<ThemeContextValue>({
   applyCustomTheme: () => {},
   deviceId: "esp32-farm-001",
   setDeviceId: () => {},
+  sidebarCollapsed: false,
+  setSidebarCollapsed: () => {},
+  backgroundBlur: true,
+  setBackgroundBlurred: () => {},
 });
 
 export function useAppTheme() {
@@ -120,6 +130,15 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
     saveSetting("deviceId", trimmed);
   };
 
+  // ── Sidebar + blur controls (synced via useUserSettings) ───
+  const setSidebarCollapsed = (collapsed: boolean) => {
+    saveSetting("sidebarCollapsed", collapsed);
+  };
+
+  const setBackgroundBlurred = (blurred: boolean) => {
+    saveSetting("backgroundBlur", blurred);
+  };
+
   return (
     <ThemeContext.Provider value={{
       theme: activeTheme,
@@ -131,6 +150,10 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
       applyCustomTheme,
       deviceId: settings.deviceId,
       setDeviceId,
+      sidebarCollapsed: settings.sidebarCollapsed,
+      setSidebarCollapsed,
+      backgroundBlur: settings.backgroundBlur,
+      setBackgroundBlurred,
     }}>
       {children}
     </ThemeContext.Provider>
