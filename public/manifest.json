@@ -1,0 +1,18 @@
+{
+  "name": "FarmAssist",
+  "short_name": "FarmAssist",
+  "description": "Real-time IoT dashboard for monitoring temperature, soil moisture, water level, and light sensors via Firebase.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a1628",
+  "theme_color": "#22d3ee",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["utilities", "productivity"]
+}

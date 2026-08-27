@@ -1,9 +1,9 @@
 "use strict";
 /**
- * Firebase Cloud Functions — FarmAssist Push Notifications
+ * Firebase Cloud Functions — FarmAssist Push Notifications (v2 / Modular)
  * ─────────────────────────────────────────────────────────────────
  * Server-side functions that send FCM push notifications for
- * critical events. These run even when the user's browser is closed.
+ * critical events. Set globally to the asia-southeast1 region.
  *
  * Functions:
  *  • askAssistant   — callable; Gemini-powered in-app help assistant
@@ -46,31 +46,51 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.askAssistant = exports.onForcePair = exports.onSensorAlert = void 0;
-const functions = __importStar(require("firebase-functions"));
-const admin = __importStar(require("firebase-admin"));
+const app_1 = require("firebase-admin/app");
+const database_1 = require("firebase-admin/database");
+const messaging_1 = require("firebase-admin/messaging");
+const v2_1 = require("firebase-functions/v2");
+const https_1 = require("firebase-functions/v2/https");
+const database_2 = require("firebase-functions/v2/database");
+const logger = __importStar(require("firebase-functions/logger"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-admin.initializeApp();
-const db = admin.database();
-const messaging = admin.messaging();
+(0, app_1.initializeApp)();
+const db = (0, database_1.getDatabase)();
+const messaging = (0, messaging_1.getMessaging)();
+// Set Asia server (Singapore) globally for all v2 functions
+(0, v2_1.setGlobalOptions)({ region: "asia-southeast1" });
 const ALERT_COOLDOWN_MS = 10 * 60 * 1000;
+// Lazy-load cached system prompt to prevent top-level initialization timeouts
+let cachedSystemPrompt = null;
+function getSystemPrompt() {
+    if (!cachedSystemPrompt) {
+        try {
+            const promptPath = path.join(__dirname, "..", "systemPrompt.txt");
+            cachedSystemPrompt = fs.readFileSync(promptPath, "utf-8");
+        }
+        catch (err) {
+            logger.error("Failed to read systemPrompt.txt:", err);
+            cachedSystemPrompt = "You are a helpful assistant for FarmAssist.";
+        }
+    }
+    return cachedSystemPrompt;
+}
 // ── Sensor threshold alert ──────────────────────────────────────
-exports.onSensorAlert = functions.database
-    .ref("/users/{uid}/devices/{deviceId}/latest")
-    .onWrite(async (change, context) => {
+exports.onSensorAlert = (0, database_2.onValueWritten)("/users/{uid}/devices/{deviceId}/latest", async (event) => {
     var _a;
-    const uid = context.params.uid;
-    const deviceId = context.params.deviceId;
-    const data = change.after.val();
+    const uid = event.params.uid;
+    const deviceId = event.params.deviceId;
+    const data = event.data.after.val();
     if (!data)
         return;
     const rangesSnap = await db
         .ref(`users/${uid}/devices/${deviceId}/ranges`)
-        .once("value");
+        .get();
     const ranges = rangesSnap.val();
     if (!ranges)
         return;
-    const tokenSnap = await db.ref(`users/${uid}/fcmToken`).once("value");
+    const tokenSnap = await db.ref(`users/${uid}/fcmToken`).get();
     const tokenData = tokenSnap.val();
     if (!(tokenData === null || tokenData === void 0 ? void 0 : tokenData.token))
         return;
@@ -99,7 +119,7 @@ exports.onSensorAlert = functions.database
     const cooldownKey = `lastAlert_${deviceId}`;
     const cooldownSnap = await db
         .ref(`_cooldowns/${uid}/${cooldownKey}`)
-        .once("value");
+        .get();
     const lastAlert = (_a = cooldownSnap.val()) !== null && _a !== void 0 ? _a : 0;
     if (Date.now() - lastAlert < ALERT_COOLDOWN_MS)
         return;
@@ -121,26 +141,24 @@ exports.onSensorAlert = functions.database
                 },
             },
         });
-        functions.logger.info(`Push sent to ${uid} for ${deviceId}`);
+        logger.info(`Push sent to ${uid} for ${deviceId}`);
     }
     catch (err) {
         if (err.code === "messaging/registration-token-not-registered" ||
             err.code === "messaging/invalid-registration-token") {
             await db.ref(`users/${uid}/fcmToken`).remove();
-            functions.logger.warn(`Removed stale FCM token for ${uid}`);
+            logger.warn(`Removed stale FCM token for ${uid}`);
         }
         else {
-            functions.logger.error("Push send failed:", err);
+            logger.error("Push send failed:", err);
         }
     }
 });
 // ── Force-pair alert ────────────────────────────────────────────
-exports.onForcePair = functions.database
-    .ref("/rover_registry/{deviceId}")
-    .onUpdate(async (change, context) => {
-    const deviceId = context.params.deviceId;
-    const before = change.before.val();
-    const after = change.after.val();
+exports.onForcePair = (0, database_2.onValueUpdated)("/rover_registry/{deviceId}", async (event) => {
+    const deviceId = event.params.deviceId;
+    const before = event.data.before.val();
+    const after = event.data.after.val();
     if (!before || !after)
         return;
     if (before.ownerUid === after.ownerUid)
@@ -152,7 +170,7 @@ exports.onForcePair = functions.database
         return;
     const tokenSnap = await db
         .ref(`users/${prevOwnerUid}/fcmToken`)
-        .once("value");
+        .get();
     const tokenData = tokenSnap.val();
     if (!(tokenData === null || tokenData === void 0 ? void 0 : tokenData.token))
         return;
@@ -173,7 +191,7 @@ exports.onForcePair = functions.database
                 },
             },
         });
-        functions.logger.info(`Force-pair push sent to ${prevOwnerUid}`);
+        logger.info(`Force-pair push sent to ${prevOwnerUid}`);
     }
     catch (err) {
         if (err.code === "messaging/registration-token-not-registered" ||
@@ -181,39 +199,25 @@ exports.onForcePair = functions.database
             await db.ref(`users/${prevOwnerUid}/fcmToken`).remove();
         }
         else {
-            functions.logger.error("Force-pair push failed:", err);
+            logger.error("Force-pair push failed:", err);
         }
     }
 });
 // ── AI Help Assistant (Gemini) ──────────────────────────────────
-/**
- * Callable function that powers the in-app assistant widget.
- * Requires the `GEMINI_API_KEY` secret:
- *   firebase functions:secrets:set GEMINI_API_KEY
- *
- * Request : { message: string, history?: { role: "user"|"model", text: string }[] }
- * Response: { reply: string }
- * Auth    : required (context.auth enforced below)
- */
-/** Load the system prompt from functions/systemPrompt.txt.
- *  __dirname = functions/lib/ at runtime, so go up one level. */
-const ASSISTANT_SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, "..", "systemPrompt.txt"), "utf-8");
-/** Per-uid sliding-window rate limit to protect the Gemini quota. */
 const ASSISTANT_RATE_LIMIT = { maxCalls: 20, windowMs: 60 * 1000 };
 const assistantRateMap = new Map();
-exports.askAssistant = functions
-    .runWith({ secrets: ["GEMINI_API_KEY"] })
-    .https.onCall(async (data, context) => {
-    var _a, _b, _c, _d, _e, _f;
-    if (!context.auth) {
-        throw new functions.https.HttpsError("unauthenticated", "Sign in to chat with the assistant.");
+exports.askAssistant = (0, https_1.onCall)({ secrets: ["GEMINI_API_KEY"] }, async (request) => {
+    var _a, _b, _c, _d;
+    var _e, _f;
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Sign in to chat with the assistant.");
     }
-    const uid = context.auth.uid;
+    const uid = request.auth.uid;
+    const data = request.data;
     const message = typeof (data === null || data === void 0 ? void 0 : data.message) === "string" ? data.message.trim() : "";
     if (!message || message.length > 1000) {
-        throw new functions.https.HttpsError("invalid-argument", "Message must be between 1 and 1000 characters.");
+        throw new https_1.HttpsError("invalid-argument", "Message must be between 1 and 1000 characters.");
     }
-    // Sanitize caller-supplied history (max 12 turns).
     const history = Array.isArray(data === null || data === void 0 ? void 0 : data.history)
         ? data.history
             .filter((t) => !!t &&
@@ -223,22 +227,20 @@ exports.askAssistant = functions
             .slice(-12)
             .map((t) => ({ role: t.role, text: t.text.slice(0, 2000) }))
         : [];
-    // Rate limit (per instance; sufficient as a soft guardrail).
     const now = Date.now();
-    const stamps = ((_a = assistantRateMap.get(uid)) !== null && _a !== void 0 ? _a : []).filter((t) => now - t < ASSISTANT_RATE_LIMIT.windowMs);
+    const stamps = ((_e = assistantRateMap.get(uid)) !== null && _e !== void 0 ? _e : []).filter((t) => now - t < ASSISTANT_RATE_LIMIT.windowMs);
     if (stamps.length >= ASSISTANT_RATE_LIMIT.maxCalls) {
-        throw new functions.https.HttpsError("resource-exhausted", "You're sending messages too fast — take a short breather! 🌱");
+        throw new https_1.HttpsError("resource-exhausted", "You're sending messages too fast — take a short breather! 🌱");
     }
     stamps.push(now);
     assistantRateMap.set(uid, stamps);
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        functions.logger.error("GEMINI_API_KEY secret is not set");
-        throw new functions.https.HttpsError("failed-precondition", "The assistant isn't configured yet. Try again later.");
+        logger.error("GEMINI_API_KEY secret is not set");
+        throw new https_1.HttpsError("failed-precondition", "The assistant isn't configured yet. Try again later.");
     }
-    // gemini-2.0-flash was retired 2026-06-01; default to a stable,
-    // cost-effective Flash-Lite. Override with the GEMINI_MODEL env var.
-    const model = (_b = process.env.GEMINI_MODEL) !== null && _b !== void 0 ? _b : "gemini-3.5-flash-lite";
+    const systemPrompt = getSystemPrompt();
+    const model = (_f = process.env.GEMINI_MODEL) !== null && _f !== void 0 ? _f : "gemini-3.5-flash-lite";
     const contents = [
         ...history.map((t) => ({
             role: t.role,
@@ -252,7 +254,7 @@ exports.askAssistant = functions
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                systemInstruction: { parts: [{ text: ASSISTANT_SYSTEM_PROMPT }] },
+                systemInstruction: { parts: [{ text: systemPrompt }] },
                 contents,
                 generationConfig: {
                     temperature: 0.7,
@@ -262,20 +264,18 @@ exports.askAssistant = functions
         });
         if (!res.ok) {
             const body = await res.text();
-            functions.logger.error(`Gemini HTTP ${res.status} for model ${model}. If this is a 404, ` +
-                `the model was retired or unavailable — set GEMINI_MODEL to a current ` +
-                `model (see https://ai.google.dev/gemini-api/docs/models). Body: ${body}`);
+            logger.error(`Gemini HTTP ${res.status} for model ${model}. Body: ${body}`);
             throw new Error(`Gemini responded ${res.status}`);
         }
         const json = (await res.json());
-        reply = (_f = (_e = (_d = (_c = json.candidates) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.content) === null || _e === void 0 ? void 0 : _e.parts) === null || _f === void 0 ? void 0 : _f.map((p) => { var _a; return (_a = p.text) !== null && _a !== void 0 ? _a : ""; }).join("").trim();
+        reply = (_d = (_c = (_b = (_a = json.candidates) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.content) === null || _c === void 0 ? void 0 : _c.parts) === null || _d === void 0 ? void 0 : _d.map((p) => { var _a; return (_a = p.text) !== null && _a !== void 0 ? _a : ""; }).join("").trim();
     }
     catch (err) {
-        functions.logger.error("Gemini call failed:", err);
-        throw new functions.https.HttpsError("internal", "The assistant had trouble responding. Please try again.");
+        logger.error("Gemini call failed:", err);
+        throw new https_1.HttpsError("internal", "The assistant had trouble responding. Please try again.");
     }
     if (!reply) {
-        throw new functions.https.HttpsError("internal", "The assistant couldn't generate a reply. Please try rephrasing.");
+        throw new https_1.HttpsError("internal", "The assistant couldn't generate a reply. Please try rephrasing.");
     }
     return { reply };
 });

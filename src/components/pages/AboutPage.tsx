@@ -1,0 +1,144 @@
+/**
+ * AboutPage.tsx
+ * ─────────────────────────────────────────────────────────────────
+ * About page showing app information, version, credits,
+ * open-source licenses, and legal links.
+ * ─────────────────────────────────────────────────────────────────
+ */
+
+"use client";
+
+import { Leaf, ExternalLink, Heart } from "lucide-react";
+
+const APP_VERSION = "1.0.0";
+const BUILD_DATE = "August 2026";
+
+const OSS_LICENSES = [
+  { name: "Next.js", license: "MIT", url: "https://nextjs.org" },
+  { name: "React", license: "MIT", url: "https://react.dev" },
+  { name: "Tailwind CSS", license: "MIT", url: "https://tailwindcss.com" },
+  { name: "Recharts", license: "MIT", url: "https://recharts.org" },
+  { name: "Lucide React", license: "ISC", url: "https://lucide.dev" },
+  { name: "Firebase JS SDK", license: "Apache-2.0", url: "https://firebase.google.com" },
+  { name: "Google Fonts (Geist)", license: "OFL-1.1", url: "https://fonts.google.com" },
+];
+
+const CREDITS = [
+  { role: "IoT Firmware & Hardware", name: "ESP32 Rover Team" },
+  { role: "AI Assistant", name: "Hikari 🌱 (Gemini-powered)" },
+  { role: "Design Inspiration", name: "Agrovator @ Sekolah" },
+];
+
+export default function AboutPage() {
+  return (
+    <div className="animate-fade-in max-w-2xl">
+      {/* ── Header ── */}
+      <div className="mb-8">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20">
+            <Leaf className="h-6 w-6 text-emerald-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">FarmAssist</h1>
+            <p className="text-sm text-slate-400">
+              Real-time IoT farming dashboard
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Version Info ── */}
+      <section className="mb-6 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-white">Version</h2>
+        <div className="space-y-2 text-sm text-slate-300">
+          <div className="flex justify-between">
+            <span className="text-slate-400">App Version</span>
+            <span className="font-mono">{APP_VERSION}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">Build</span>
+            <span>{BUILD_DATE}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">Runtime</span>
+            <span>Next.js + Firebase</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">AI Model</span>
+            <span>Gemini Flash Lite</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Credits ── */}
+      <section className="mb-6 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-white">Credits</h2>
+        <div className="space-y-3">
+          {CREDITS.map((credit) => (
+            <div key={credit.role} className="flex items-center justify-between">
+              <span className="text-sm text-slate-400">{credit.role}</span>
+              <span className="text-sm text-white">{credit.name}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Open Source Licenses ── */}
+      <section className="mb-6 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-white">
+          Open Source Dependencies
+        </h2>
+        <div className="space-y-2">
+          {OSS_LICENSES.map((lib) => (
+            <div
+              key={lib.name}
+              className="flex items-center justify-between rounded-xl px-3 py-2 transition-colors hover:bg-white/5"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-white">{lib.name}</span>
+                <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] text-slate-400">
+                  {lib.license}
+                </span>
+              </div>
+              <a
+                href={lib.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-500 transition-colors hover:text-cyan-400"
+                aria-label={`${lib.name} website`}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Links ── */}
+      <section className="mb-6 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-white">Legal</h2>
+        <div className="space-y-2">
+          <a
+            href="#"
+            className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            Privacy Policy
+            <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+          </a>
+          <a
+            href="#"
+            className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            Terms of Service
+            <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+          </a>
+        </div>
+      </section>
+
+      {/* ── Footer ── */}
+      <div className="flex items-center justify-center gap-1.5 py-6 text-xs text-slate-500">
+        Made with <Heart className="h-3 w-3 text-red-400" /> for smart farming
+      </div>
+    </div>
+  );
+}

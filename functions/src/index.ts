@@ -1,8 +1,8 @@
 /**
- * Firebase Cloud Functions — FarmAssist Push Notifications
+ * Firebase Cloud Functions — FarmAssist Push Notifications (v2 / Modular)
  * ─────────────────────────────────────────────────────────────────
  * Server-side functions that send FCM push notifications for
- * critical events. These run even when the user's browser is closed.
+ * critical events. Set globally to the asia-southeast1 region.
  *
  * Functions:
  *  • askAssistant   — callable; Gemini-powered in-app help assistant
@@ -11,34 +11,57 @@
  * ─────────────────────────────────────────────────────────────────
  */
 
-import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
+import { initializeApp } from "firebase-admin/app";
+import { getDatabase } from "firebase-admin/database";
+import { getMessaging } from "firebase-admin/messaging";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onValueWritten, onValueUpdated } from "firebase-functions/v2/database";
+import * as logger from "firebase-functions/logger";
 import * as fs from "fs";
 import * as path from "path";
 
-admin.initializeApp();
+initializeApp();
 
-const db = admin.database();
-const messaging = admin.messaging();
+const db = getDatabase();
+const messaging = getMessaging();
+
+// Set Asia server (Singapore) globally for all v2 functions
+setGlobalOptions({ region: "asia-southeast1" });
 
 const ALERT_COOLDOWN_MS = 10 * 60 * 1000;
 
+// Lazy-load cached system prompt to prevent top-level initialization timeouts
+let cachedSystemPrompt: string | null = null;
+function getSystemPrompt(): string {
+  if (!cachedSystemPrompt) {
+    try {
+      const promptPath = path.join(__dirname, "..", "systemPrompt.txt");
+      cachedSystemPrompt = fs.readFileSync(promptPath, "utf-8");
+    } catch (err) {
+      logger.error("Failed to read systemPrompt.txt:", err);
+      cachedSystemPrompt = "You are a helpful assistant for FarmAssist.";
+    }
+  }
+  return cachedSystemPrompt;
+}
+
 // ── Sensor threshold alert ──────────────────────────────────────
-export const onSensorAlert = functions.database
-  .ref("/users/{uid}/devices/{deviceId}/latest")
-  .onWrite(async (change, context) => {
-    const uid = context.params.uid;
-    const deviceId = context.params.deviceId;
-    const data = change.after.val();
+export const onSensorAlert = onValueWritten(
+  "/users/{uid}/devices/{deviceId}/latest",
+  async (event) => {
+    const uid = event.params.uid;
+    const deviceId = event.params.deviceId;
+    const data = event.data.after.val();
     if (!data) return;
 
     const rangesSnap = await db
       .ref(`users/${uid}/devices/${deviceId}/ranges`)
-      .once("value");
+      .get();
     const ranges = rangesSnap.val();
     if (!ranges) return;
 
-    const tokenSnap = await db.ref(`users/${uid}/fcmToken`).once("value");
+    const tokenSnap = await db.ref(`users/${uid}/fcmToken`).get();
     const tokenData = tokenSnap.val();
     if (!tokenData?.token) return;
 
@@ -72,7 +95,7 @@ export const onSensorAlert = functions.database
     const cooldownKey = `lastAlert_${deviceId}`;
     const cooldownSnap = await db
       .ref(`_cooldowns/${uid}/${cooldownKey}`)
-      .once("value");
+      .get();
     const lastAlert = cooldownSnap.val() ?? 0;
     if (Date.now() - lastAlert < ALERT_COOLDOWN_MS) return;
     await db.ref(`_cooldowns/${uid}/${cooldownKey}`).set(Date.now());
@@ -94,27 +117,28 @@ export const onSensorAlert = functions.database
           },
         },
       });
-      functions.logger.info(`Push sent to ${uid} for ${deviceId}`);
+      logger.info(`Push sent to ${uid} for ${deviceId}`);
     } catch (err: any) {
       if (
         err.code === "messaging/registration-token-not-registered" ||
         err.code === "messaging/invalid-registration-token"
       ) {
         await db.ref(`users/${uid}/fcmToken`).remove();
-        functions.logger.warn(`Removed stale FCM token for ${uid}`);
+        logger.warn(`Removed stale FCM token for ${uid}`);
       } else {
-        functions.logger.error("Push send failed:", err);
+        logger.error("Push send failed:", err);
       }
     }
-  });
+  }
+);
 
 // ── Force-pair alert ────────────────────────────────────────────
-export const onForcePair = functions.database
-  .ref("/rover_registry/{deviceId}")
-  .onUpdate(async (change, context) => {
-    const deviceId = context.params.deviceId;
-    const before = change.before.val();
-    const after = change.after.val();
+export const onForcePair = onValueUpdated(
+  "/rover_registry/{deviceId}",
+  async (event) => {
+    const deviceId = event.params.deviceId;
+    const before = event.data.before.val();
+    const after = event.data.after.val();
 
     if (!before || !after) return;
     if (before.ownerUid === after.ownerUid) return;
@@ -125,7 +149,7 @@ export const onForcePair = functions.database
 
     const tokenSnap = await db
       .ref(`users/${prevOwnerUid}/fcmToken`)
-      .once("value");
+      .get();
     const tokenData = tokenSnap.val();
     if (!tokenData?.token) return;
 
@@ -146,7 +170,7 @@ export const onForcePair = functions.database
           },
         },
       });
-      functions.logger.info(`Force-pair push sent to ${prevOwnerUid}`);
+      logger.info(`Force-pair push sent to ${prevOwnerUid}`);
     } catch (err: any) {
       if (
         err.code === "messaging/registration-token-not-registered" ||
@@ -154,30 +178,13 @@ export const onForcePair = functions.database
       ) {
         await db.ref(`users/${prevOwnerUid}/fcmToken`).remove();
       } else {
-        functions.logger.error("Force-pair push failed:", err);
+        logger.error("Force-pair push failed:", err);
       }
     }
-  });
-
-// ── AI Help Assistant (Gemini) ──────────────────────────────────
-/**
- * Callable function that powers the in-app assistant widget.
- * Requires the `GEMINI_API_KEY` secret:
- *   firebase functions:secrets:set GEMINI_API_KEY
- *
- * Request : { message: string, history?: { role: "user"|"model", text: string }[] }
- * Response: { reply: string }
- * Auth    : required (context.auth enforced below)
- */
-
-/** Load the system prompt from functions/systemPrompt.txt.
- *  __dirname = functions/lib/ at runtime, so go up one level. */
-const ASSISTANT_SYSTEM_PROMPT = fs.readFileSync(
-  path.join(__dirname, "..", "systemPrompt.txt"),
-  "utf-8"
+  }
 );
 
-/** Per-uid sliding-window rate limit to protect the Gemini quota. */
+// ── AI Help Assistant (Gemini) ──────────────────────────────────
 const ASSISTANT_RATE_LIMIT = { maxCalls: 20, windowMs: 60 * 1000 };
 const assistantRateMap = new Map<string, number[]>();
 
@@ -186,27 +193,27 @@ interface AssistantTurn {
   text: string;
 }
 
-export const askAssistant = functions
-  .runWith({ secrets: ["GEMINI_API_KEY"] })
-  .https.onCall(async (data, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError(
+export const askAssistant = onCall(
+  { secrets: ["GEMINI_API_KEY"] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError(
         "unauthenticated",
         "Sign in to chat with the assistant."
       );
     }
-    const uid: string = context.auth.uid;
+    const uid: string = request.auth.uid;
+    const data = request.data;
 
     const message =
       typeof data?.message === "string" ? data.message.trim() : "";
     if (!message || message.length > 1000) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "invalid-argument",
         "Message must be between 1 and 1000 characters."
       );
     }
 
-    // Sanitize caller-supplied history (max 12 turns).
     const history: AssistantTurn[] = Array.isArray(data?.history)
       ? (data.history as unknown[])
           .filter(
@@ -220,13 +227,12 @@ export const askAssistant = functions
           .map((t) => ({ role: t.role, text: t.text.slice(0, 2000) }))
       : [];
 
-    // Rate limit (per instance; sufficient as a soft guardrail).
     const now = Date.now();
     const stamps = (assistantRateMap.get(uid) ?? []).filter(
       (t) => now - t < ASSISTANT_RATE_LIMIT.windowMs
     );
     if (stamps.length >= ASSISTANT_RATE_LIMIT.maxCalls) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "resource-exhausted",
         "You're sending messages too fast — take a short breather! 🌱"
       );
@@ -236,15 +242,14 @@ export const askAssistant = functions
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      functions.logger.error("GEMINI_API_KEY secret is not set");
-      throw new functions.https.HttpsError(
+      logger.error("GEMINI_API_KEY secret is not set");
+      throw new HttpsError(
         "failed-precondition",
         "The assistant isn't configured yet. Try again later."
       );
     }
 
-    // gemini-2.0-flash was retired 2026-06-01; default to a stable,
-    // cost-effective Flash-Lite. Override with the GEMINI_MODEL env var.
+    const systemPrompt = getSystemPrompt();
     const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
     const contents = [
       ...history.map((t) => ({
@@ -262,7 +267,7 @@ export const askAssistant = functions
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            systemInstruction: { parts: [{ text: ASSISTANT_SYSTEM_PROMPT }] },
+            systemInstruction: { parts: [{ text: systemPrompt }] },
             contents,
             generationConfig: {
               temperature: 0.7,
@@ -273,10 +278,8 @@ export const askAssistant = functions
       );
       if (!res.ok) {
         const body = await res.text();
-        functions.logger.error(
-          `Gemini HTTP ${res.status} for model ${model}. If this is a 404, ` +
-            `the model was retired or unavailable — set GEMINI_MODEL to a current ` +
-            `model (see https://ai.google.dev/gemini-api/docs/models). Body: ${body}`
+        logger.error(
+          `Gemini HTTP ${res.status} for model ${model}. Body: ${body}`
         );
         throw new Error(`Gemini responded ${res.status}`);
       }
@@ -288,19 +291,20 @@ export const askAssistant = functions
         .join("")
         .trim();
     } catch (err) {
-      functions.logger.error("Gemini call failed:", err);
-      throw new functions.https.HttpsError(
+      logger.error("Gemini call failed:", err);
+      throw new HttpsError(
         "internal",
         "The assistant had trouble responding. Please try again."
       );
     }
 
     if (!reply) {
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "internal",
         "The assistant couldn't generate a reply. Please try rephrasing."
       );
     }
 
     return { reply };
-  });
+  }
+);

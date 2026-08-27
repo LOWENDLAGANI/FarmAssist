@@ -6,7 +6,7 @@
  * ─────────────────────────────────────────────────────────────────
  */
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
@@ -23,10 +23,18 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#22d3ee",
+};
+
 export const metadata: Metadata = {
   title: "FarmAssist",
   description:
     "Real-time IoT dashboard for monitoring temperature, soil moisture, water level, and light sensors via Firebase.",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

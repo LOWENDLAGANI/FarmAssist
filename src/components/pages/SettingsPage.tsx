@@ -27,7 +27,16 @@ import {
   ImageIcon,
   Upload,
   Trash2,
+  Volume2,
+  VolumeX,
+  Vibrate,
+  Download,
+  UploadCloud,
+  HardDrive,
+  Archive,
 } from "lucide-react";
+import { isSoundEnabled, setSoundEnabled, isHapticEnabled, setHapticEnabled } from "@/lib/notificationSound";
+import { createBackup, downloadBackup, parseBackup, applyBackup, type BackupData } from "@/lib/backupRestore";
 import { useAppTheme } from "../ThemeProvider";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
 import RoverOverviewCard from "../RoverOverviewCard";
@@ -274,6 +283,14 @@ export default function SettingsPage({
   const [unlinked, setUnlinked] = useState(false);
   const [showCustomBuilder, setShowCustomBuilder] = useState(false);
 
+  // ── Sound/Haptic preferences (synced with localStorage) ──────
+  const [, forceUpdate] = useState(0);
+  const soundEnabled = isSoundEnabled();
+  const hapticEnabled = isHapticEnabled();
+
+  // ── Import result feedback ───────────────────────────────────
+  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+
   // ── Local editing state for ranges ──────────────────────────
   const [editingRanges, setEditingRanges] = useState<SensorRanges>(sensorRanges);
   const [rangesSaved, setRangesSaved] = useState(false);
@@ -359,6 +376,42 @@ export default function SettingsPage({
     } catch {
       // Fallback: select text
     }
+  };
+
+  const handleExportSettings = () => {
+    const backup = createBackup({
+      deviceId,
+      theme,
+      backgroundBlur,
+      sensorRanges: editingRanges,
+    });
+    downloadBackup(backup);
+  };
+
+  const handleImportSettings = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result as string;
+      const backup = parseBackup(text);
+      if (!backup) {
+        setImportResult({ success: false, message: "Invalid backup file format." });
+        setTimeout(() => setImportResult(null), 3000);
+        return;
+      }
+      const restored = applyBackup(backup);
+      if (restored.deviceId) onDeviceChange(restored.deviceId);
+      if (restored.sensorRanges) {
+        setEditingRanges(restored.sensorRanges);
+        onRangesSave(restored.sensorRanges);
+      }
+      setImportResult({ success: true, message: "Settings restored successfully!" });
+      setTimeout(() => setImportResult(null), 3000);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   const handleTestNotification = () => {
@@ -911,8 +964,86 @@ export default function SettingsPage({
           </div>
         </div>
 
-        {/* About */}
+        {/* Sound & Haptic Feedback */}
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-5">
+          <h3 className="mb-3 text-sm font-semibold text-white">Sound & Haptic Feedback</h3>
+          <p className="mb-3 text-xs text-slate-400">
+            Control notification sounds and vibration on critical events.
+          </p>
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                const next = !isSoundEnabled();
+                setSoundEnabled(next);
+                forceUpdate((n) => n + 1);
+              }}
+              className="flex w-full items-center justify-between rounded-xl bg-[#0a1628] p-3 transition-all hover:bg-[#0f2240]"
+            >
+              <div className="flex items-center gap-2">
+                {soundEnabled ? (
+                  <Volume2 className="h-4 w-4 text-cyan-400" />
+                ) : (
+                  <VolumeX className="h-4 w-4 text-slate-400" />
+                )}
+                <span className="text-sm text-slate-300">Notification Sounds</span>
+              </div>
+              <span className={`text-xs font-medium ${soundEnabled ? "text-cyan-400" : "text-slate-500"}`}>
+                {soundEnabled ? "On" : "Off"}
+              </span>
+            </button>
+            <button
+              onClick={() => {
+                const next = !isHapticEnabled();
+                setHapticEnabled(next);
+                forceUpdate((n) => n + 1);
+              }}
+              className="flex w-full items-center justify-between rounded-xl bg-[#0a1628] p-3 transition-all hover:bg-[#0f2240]"
+            >
+              <div className="flex items-center gap-2">
+                <Vibrate className={`h-4 w-4 ${hapticEnabled ? "text-cyan-400" : "text-slate-400"}`} />
+                <span className="text-sm text-slate-300">Haptic Feedback</span>
+              </div>
+              <span className={`text-xs font-medium ${hapticEnabled ? "text-cyan-400" : "text-slate-500"}`}>
+                {hapticEnabled ? "On" : "Off"}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Backup & Restore */}
         <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-6">
+          <h3 className="mb-3 text-sm font-semibold text-white">Backup & Restore</h3>
+          <p className="mb-3 text-xs text-slate-400">
+            Export your settings to a file, or import a backup.
+          </p>
+          <div className="space-y-2">
+            <button
+              onClick={handleExportSettings}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-all hover:bg-cyan-500/30 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Download className="h-4 w-4" />
+              Export Settings
+            </button>
+            <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-3 text-sm font-medium text-slate-400 transition-all hover:bg-[#0f2240] hover:text-white">
+              <UploadCloud className="h-4 w-4" />
+              Import Settings
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={handleImportSettings}
+              />
+            </label>
+            {importResult && (
+              <p className={`text-center text-xs ${importResult.success ? "text-emerald-400" : "text-red-400"}`}>
+                {importResult.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* About */}
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-7">
           <h3 className="mb-3 text-sm font-semibold text-white">About</h3>
           <div className="space-y-2 text-xs text-slate-400">
             <p>FarmAssist IoT Dashboard Powered by Minetallest v0.1.0</p>

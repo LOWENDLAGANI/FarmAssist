@@ -13,6 +13,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import { Maximize2 } from "lucide-react";
 import {
   XAxis,
   YAxis,
@@ -28,6 +29,7 @@ import { SENSOR_META } from "@/types/telemetry";
 interface ChartSectionProps {
   activeSensor: SensorKey;
   history: ChartDataPoint[];
+  onExpand?: () => void;
 }
 
 const DATA_POINT_OPTIONS = [10, 15, 25, 50, 100] as const;
@@ -52,6 +54,7 @@ function formatTooltipTime(ts: React.ReactNode): string {
 export default function ChartSection({
   activeSensor,
   history,
+  onExpand,
 }: ChartSectionProps) {
   const meta = SENSOR_META[activeSensor];
   const pointCountSelectId = useId();
@@ -97,6 +100,17 @@ export default function ChartSection({
             />
             <span className="text-sm text-slate-400">{meta.unit}</span>
           </div>
+          {onExpand && (
+            <button
+              type="button"
+              onClick={onExpand}
+              className="flex items-center gap-1 rounded-lg bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-400 transition-colors hover:bg-cyan-500/20"
+              aria-label="Expand chart to full screen"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              Full Screen
+            </button>
+          )}
           <label
             htmlFor={pointCountSelectId}
             className="flex items-center gap-2 text-xs text-slate-400"

@@ -98,6 +98,18 @@ export function useFCM(userId: string): FCMState {
             return;
           }
 
+          // Register the service worker if not already active.
+          // Firebase getToken() requires an active SW to subscribe to push.
+          if ("serviceWorker" in navigator) {
+            const existingReg = await navigator.serviceWorker.getRegistration("/");
+            if (!existingReg) {
+              console.log("[useFCM] Registering service worker...");
+              await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
+                scope: "/",
+              });
+            }
+          }
+
           const fcmToken = await getToken(messaging, { vapidKey });
           console.log("[useFCM] FCM token obtained:", !!fcmToken);
 

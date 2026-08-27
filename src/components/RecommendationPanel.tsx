@@ -216,7 +216,7 @@ export default function RecommendationPanel({
             <Sparkles className="h-4 w-4 text-cyan-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">AI Overview</h2>
+            <h2 className="text-lg font-semibold text-white">Sensor Analysis</h2>
             <p className="text-sm text-slate-400">
               Detailed sensor analysis & recommendations
             </p>

@@ -35,6 +35,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CircleUserRound,
+  Trophy,
+  Info,
   type LucideIcon,
 } from "lucide-react";
 import { useAppTheme } from "./ThemeProvider";
@@ -50,8 +52,10 @@ const NAV_ITEMS: NavItem[] = [
   { icon: SlidersHorizontal, label: "Control", id: "control" },
   { icon: Bell, label: "Notifications", id: "notifications" },
   { icon: Clock, label: "History", id: "history" },
+  { icon: Trophy, label: "Achievements", id: "achievements" },
   { icon: CircleUserRound, label: "Account", id: "account" },
   { icon: Settings, label: "Settings", id: "settings" },
+  { icon: Info, label: "About", id: "about" },
 ];
 
 interface SidebarProps {
