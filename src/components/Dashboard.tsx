@@ -46,6 +46,7 @@ import AchievementToast from "./AchievementToast";
 import DailyChallenges from "./DailyChallenges";
 import OnboardingWizard from "./OnboardingWizard";
 import ChangelogModal from "./ChangelogModal";
+import LocationPrompt from "./LocationPrompt";
 import QuickActionFAB from "./QuickActionFAB";
 import XpEarnPopup, { createXpEvent, type XpEvent } from "./XpEarnPopup";
 import ErrorDialog from "./ErrorDialog";
@@ -410,6 +411,9 @@ export default function Dashboard() {
 
       {/* ── What's New Changelog ── */}
       <ChangelogModal />
+
+      {/* ── Location Permission Prompt ── */}
+      <LocationPrompt />
 
       {backgroundMedia?.type === "video" && (
         <video

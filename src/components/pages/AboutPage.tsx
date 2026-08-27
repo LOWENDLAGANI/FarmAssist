@@ -31,20 +31,46 @@ const CREDITS = [
 
 export default function AboutPage() {
   return (
-    <div className="animate-fade-in max-w-2xl">
-      {/* ── Header ── */}
-      <div className="mb-8">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20">
-            <Leaf className="h-6 w-6 text-emerald-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">FarmAssist</h1>
-            <p className="text-sm text-slate-400">
-              Real-time IoT farming dashboard
+    <div className="animate-fade-in mx-auto max-w-2xl">
+      {/* ── Hero Image ── */}
+      {/*
+        Drop your own picture at: public/about-hero.jpg
+        It will be shown here above all text. If the file is missing,
+        a styled placeholder with a leaf icon appears instead.
+      */}
+      <div className="mb-8 aspect-square w-full max-w-md mx-auto overflow-hidden rounded-2xl border border-cyan-900/20 bg-[#0c1a2e]">
+        <img
+          src="/about-hero.jpg"
+          alt="FarmAssist hero"
+          className="h-full w-full object-cover"
+          onError={(e) => {
+            const img = e.currentTarget;
+            if (img.dataset.fallback) return;
+            img.dataset.fallback = "1";
+            img.style.display = "none";
+            const placeholder = img.nextElementSibling as HTMLElement;
+            if (placeholder) placeholder.style.display = "flex";
+          }}
+        />
+        <div
+          className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-900/30 to-cyan-900/30"
+          style={{ display: "none" }}
+        >
+          <div className="text-center">
+            <Leaf className="mx-auto mb-2 h-10 w-10 text-emerald-500/40" />
+            <p className="text-xs text-slate-500">
+              Drop your picture at<br />public/about-hero.jpg
             </p>
           </div>
         </div>
+      </div>
+
+      {/* ── Header ── */}
+      <div className="mb-8 text-center">
+        <h1 className="text-2xl font-bold text-white">FarmAssist</h1>
+        <p className="mt-1 text-sm text-slate-400">
+          Real-time IoT farming dashboard
+        </p>
       </div>
 
       {/* ── Version Info ── */}
