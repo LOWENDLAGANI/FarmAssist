@@ -48,6 +48,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.askAssistant = exports.onForcePair = exports.onSensorAlert = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 admin.initializeApp();
 const db = admin.database();
 const messaging = admin.messaging();
@@ -193,23 +195,9 @@ exports.onForcePair = functions.database
  * Response: { reply: string }
  * Auth    : required (context.auth enforced below)
  */
-const ASSISTANT_SYSTEM_PROMPT = `You are "Buddy", the friendly FarmAssist helper mascot.
-FarmAssist is an IoT farming dashboard where users pair ESP32-powered "Rovers" (sensor units) that report temperature, soil moisture, water level, and light readings to Firebase in real time.
-
-What you know about the app:
-• Pairing: users claim a Rover by entering its device ID (e.g. "esp32-farm-001"); ownership is tracked in a shared registry, and pairing can be force-transferred if a Rover is already claimed.
-• Sensors: each Rover streams live temperature (°C), soil moisture (%), water level (%), and light (lux). Users configure optimal min/max ranges per sensor.
-• Alerts: when a reading leaves its optimal range, the app records a notification and can send a push notification (with cooldown), even when the browser is closed.
-• History: telemetry is charted over time, and users can run logging sessions to capture data points for review.
-• Customization: multiple dashboard themes (Midnight, Forest, Sunset, Midnight Blue, Light, Custom) with per-user settings synced across devices.
-• Programme: some accounts track a programme phase (e.g. "Lab I - Online Phase") with start/end dates.
-
-Rules:
-• Stay warm, upbeat and concise (2–5 sentences unless steps are needed).
-• Only answer questions about FarmAssist, its features, IoT/farming basics related to the sensors, or general troubleshooting of the app and Rovers.
-• If asked about anything unrelated (coding, other products, opinions), politely say it's outside your scope and steer back to helping with FarmAssist.
-• Never invent features that don't exist, and never share or request passwords or personal data.
-• If you can't determine something account-specific (like why one particular Rover is offline), give the most likely causes and practical next steps.`;
+/** Load the system prompt from functions/systemPrompt.txt.
+ *  __dirname = functions/lib/ at runtime, so go up one level. */
+const ASSISTANT_SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, "..", "systemPrompt.txt"), "utf-8");
 /** Per-uid sliding-window rate limit to protect the Gemini quota. */
 const ASSISTANT_RATE_LIMIT = { maxCalls: 20, windowMs: 60 * 1000 };
 const assistantRateMap = new Map();
@@ -248,7 +236,9 @@ exports.askAssistant = functions
         functions.logger.error("GEMINI_API_KEY secret is not set");
         throw new functions.https.HttpsError("failed-precondition", "The assistant isn't configured yet. Try again later.");
     }
-    const model = (_b = process.env.GEMINI_MODEL) !== null && _b !== void 0 ? _b : "gemini-2.0-flash";
+    // gemini-2.0-flash was retired 2026-06-01; default to a stable,
+    // cost-effective Flash-Lite. Override with the GEMINI_MODEL env var.
+    const model = (_b = process.env.GEMINI_MODEL) !== null && _b !== void 0 ? _b : "gemini-3.5-flash-lite";
     const contents = [
         ...history.map((t) => ({
             role: t.role,
@@ -271,7 +261,10 @@ exports.askAssistant = functions
             }),
         });
         if (!res.ok) {
-            functions.logger.error("Gemini HTTP error", res.status, await res.text());
+            const body = await res.text();
+            functions.logger.error(`Gemini HTTP ${res.status} for model ${model}. If this is a 404, ` +
+                `the model was retired or unavailable — set GEMINI_MODEL to a current ` +
+                `model (see https://ai.google.dev/gemini-api/docs/models). Body: ${body}`);
             throw new Error(`Gemini responded ${res.status}`);
         }
         const json = (await res.json());

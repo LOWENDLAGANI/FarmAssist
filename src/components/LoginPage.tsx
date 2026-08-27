@@ -110,7 +110,7 @@ export default function LoginPage() {
           </h1>
           <p className="mt-2 flex items-center justify-center gap-2 text-sm font-medium text-lime-200/90">
             <Leaf className="h-3.5 w-3.5" aria-hidden="true" />
-            Ingat Agrovator, Ingat Minetallest ehehhehehehehehhe
+            Simplified IoT Dashboard just for you
             <Leaf className="h-3.5 w-3.5 -scale-x-100" aria-hidden="true" />
           </p>
         </div>

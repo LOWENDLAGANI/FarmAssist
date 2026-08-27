@@ -20,9 +20,9 @@ import { useAssistant } from "@/hooks/useAssistant";
 import { ASSISTANT_FAQS } from "@/lib/assistantFaq";
 
 const MASCOT_SRC = "/mascot.png";
-const ASSISTANT_NAME = "Buddy";
+const ASSISTANT_NAME = "Hikari";
 const GREETING =
-  "Hi! I'm Buddy 🌱 Ask me anything about FarmAssist — pairing Rovers, sensor readings, alerts and more. Or tap a question below!";
+  "Hi! I'm Hikari 🌱 Ask me anything about FarmAssist — pairing Rovers, sensor readings, alerts and more. Or tap a question below!";
 const TEASER = "Need help? Ask me! 🌱";
 
 export default function AssistantWidget() {
