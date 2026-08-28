@@ -18,7 +18,6 @@ import {
   Clock,
   Settings,
   SlidersHorizontal,
-  Trophy,
   CircleUserRound,
   Info,
   MoreHorizontal,
@@ -42,7 +41,6 @@ const PRIMARY_ITEMS: NavItem[] = [
 
 /** Secondary pages shown inside the "More" menu. */
 const MORE_ITEMS: NavItem[] = [
-  { icon: Trophy, label: "Achievements", id: "achievements" },
   { icon: CircleUserRound, label: "Account", id: "account" },
   { icon: Settings, label: "Settings", id: "settings" },
   { icon: Info, label: "About", id: "about" },

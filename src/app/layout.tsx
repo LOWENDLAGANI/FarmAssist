@@ -12,6 +12,7 @@ import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import AuthProvider from "@/components/AuthProvider";
 import AssistantWidget from "@/components/AssistantWidget";
+import PwaRegistration from "@/components/PwaRegistration";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,6 +36,14 @@ export const metadata: Metadata = {
   description:
     "Real-time IoT dashboard for monitoring temperature, soil moisture, water level, and light sensors via Firebase.",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "FarmAssist",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({
@@ -53,6 +62,7 @@ export default function RootLayout({
           <ThemeProvider>
             {children}
             <AssistantWidget />
+            <PwaRegistration />
           </ThemeProvider>
         </AuthProvider>
       </body>

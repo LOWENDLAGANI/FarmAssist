@@ -28,7 +28,6 @@ import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { SensorKey } from "@/types/telemetry";
 import { generateRecommendations } from "@/lib/recommendations";
 import { useProgramme } from "@/hooks/useProgramme";
-import { useGamification } from "@/hooks/useGamification";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { isOnboardingDone } from "./OnboardingWizard";
 import { alertUser } from "@/lib/notificationSound";
@@ -41,31 +40,25 @@ import FullScreenChart from "./FullScreenChart";
 import RecommendationPanel from "./RecommendationPanel";
 import WelcomeBanner from "./WelcomeBanner";
 import WeatherWidget from "./WeatherWidget";
-import GamificationBar from "./GamificationBar";
-import AchievementToast from "./AchievementToast";
-import DailyChallenges from "./DailyChallenges";
 import OnboardingWizard from "./OnboardingWizard";
 import ChangelogModal from "./ChangelogModal";
 import LocationPrompt from "./LocationPrompt";
 import QuickActionFAB from "./QuickActionFAB";
-import XpEarnPopup, { createXpEvent, type XpEvent } from "./XpEarnPopup";
 import ErrorDialog from "./ErrorDialog";
 import DeviceMismatchBanner from "./DeviceMismatchBanner";
 import OwnershipDeniedOverlay from "./OwnershipDeniedOverlay";
 import GuestModeBanner from "./GuestModeBanner";
+import PwaInstallBanner from "./PwaInstallBanner";
 import NotificationsPage from "./pages/NotificationsPage";
 import CameraPage from "./pages/CameraPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
 import AccountPage from "./pages/AccountPage";
 import ControlPage from "./pages/ControlPage";
-import AchievementsPage from "./pages/AchievementsPage";
 import AboutPage from "./pages/AboutPage";
 import {
   SkeletonGauge,
   SkeletonBanner,
-  SkeletonGamificationBar,
-  SkeletonChallenges,
   SkeletonChart,
   SkeletonRecommendations,
 } from "./Skeleton";
@@ -247,96 +240,20 @@ export default function Dashboard() {
   // ── Programme / phase data for the welcome banner ─────────
   const { badges: programmeBadges } = useProgramme(userId);
 
-  // ── Gamification (XP, levels, streaks, achievements) ─────
-  const {
-    data: gamificationData,
-    barData,
-    awardXp,
-    incrementStat,
-    unlockAchievement,
-    checkStreaks,
-    recentAchievement,
-    dailyChallenges,
-    claimChallenge,
-    trackChallengeProgress,
-  } = useGamification(userId);
-
-  // ── Auto-unlock first_light / first_pair when device is linked ──
-  const devicePairCheckedRef = useRef(false);
-  useEffect(() => {
-    if (isGuest || devicePairCheckedRef.current) return;
-    if (deviceLinkStatus === "linked" && deviceId) {
-      devicePairCheckedRef.current = true;
-      unlockAchievement("first_light");
-      unlockAchievement("first_pair");
-    }
-  }, [isGuest, deviceLinkStatus, deviceId, unlockAchievement]);
-
-  // ── Check streaks on mount and when telemetry updates ────
-  const streakCheckedRef = useRef(false);
-  useEffect(() => {
-    if (isGuest || streakCheckedRef.current) return;
-    streakCheckedRef.current = true;
-    // Check if all sensors are currently in range
-    const allOptimal = effectiveLatest
-      ? Object.entries(ranges).every(([key, range]) => {
-          const val = effectiveLatest[key as keyof typeof effectiveLatest];
-          return typeof val === "number" && val >= range.optimalMin && val <= range.optimalMax;
-        })
-      : false;
-    checkStreaks(allOptimal);
-  }, [isGuest, effectiveLatest, ranges, checkStreaks]);
-
-  // ── Gamification: wrap session actions with XP awards ─────
+  // ── Session actions (simplified) ─────
   const handleStartSession = useCallback(
     async (name?: string) => {
-      const session = await startSession(name);
-      if (session && !isGuest) {
-        awardXp(20, "Started a logging session", "📊");
-        incrementStat("sessionsRun");
-      }
-      return session;
+      return await startSession(name);
     },
-    [startSession, isGuest, awardXp, incrementStat]
+    [startSession]
   );
 
   const handleStopSession = useCallback(
     async () => {
       await stopSession();
-      if (!isGuest) {
-        awardXp(30, "Completed a logging session", "📊");
-      }
     },
-    [stopSession, isGuest, awardXp]
+    [stopSession]
   );
-
-  // ── Track daily challenge progress ───────────────────────
-  // Track sensor range time every minute when telemetry is live
-  useEffect(() => {
-    if (isGuest || !effectiveLatest || !trackChallengeProgress) return;
-
-    const interval = setInterval(() => {
-      // Check each sensor
-      for (const key of SENSOR_KEYS) {
-        const val = effectiveLatest[key];
-        const range = ranges[key];
-        if (typeof val === "number" && range && val >= range.optimalMin && val <= range.optimalMax) {
-          trackChallengeProgress("keep_sensor_in_range", key, 1);
-        }
-      }
-      // Check all-optimal
-      const allOptimal = SENSOR_KEYS.every((key) => {
-        const val = effectiveLatest[key];
-        const range = ranges[key];
-        return typeof val === "number" && range && val >= range.optimalMin && val <= range.optimalMax;
-      });
-      if (allOptimal) {
-        trackChallengeProgress("maintain_all_optimal", undefined, 1);
-      }
-    }, 60_000); // every minute
-
-    return () => clearInterval(interval);
-  }, [isGuest, effectiveLatest, ranges, trackChallengeProgress]);
 
   // ── Recommendations (uses configurable ranges) ─────────────
   const recommendations = useMemo(() => {
@@ -367,12 +284,6 @@ export default function Dashboard() {
   // Sidebar collapse → gently animate the main content reflow instead of snapping
   const [contentReflowing, setContentReflowing] = useState(false);
   const handleSidebarCollapsedChange = () => setContentReflowing(true);
-
-  // ── XP earn animation events ──
-  const [xpEvents, setXpEvents] = useState<XpEvent[]>([]);
-  const addXpEvent = useCallback((amount: number, reason: string, icon: string) => {
-    setXpEvents((prev) => [...prev, createXpEvent(amount, reason, icon)]);
-  }, []);
 
   // ── Keyboard shortcuts ────────────────────────────────────
   useKeyboardShortcuts({
@@ -460,6 +371,9 @@ export default function Dashboard() {
           {/* Guest Mode Banner */}
           <GuestModeBanner />
 
+          {/* PWA Install Prompt */}
+          <PwaInstallBanner />
+
           {/* Ownership denied overlay - skip in guest mode */}
           {!isGuest && effectiveDeviceLinkStatus === "taken" && activePage !== "settings" && (
             <OwnershipDeniedOverlay
@@ -474,7 +388,6 @@ export default function Dashboard() {
           {!isGuest && isLoading && activePage === "dashboard" && (
             <div className="animate-fade-in">
               <SkeletonBanner />
-              <SkeletonGamificationBar />
               <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 lg:grid-cols-4">
                 {[1, 2, 3, 4].map((i) => (
                   <SkeletonGauge key={i} />
@@ -535,22 +448,6 @@ export default function Dashboard() {
               <div className="mb-4 animate-slide-up sm:mb-6">
                 <WeatherWidget />
               </div>
-
-              {/* ── Gamification bar ── */}
-              <div className="animate-slide-up">
-                <GamificationBar data={barData} />
-              </div>
-
-              {/* ── Daily Challenges ── */}
-              {!isGuest && (
-                <div className="animate-slide-up">
-                  <DailyChallenges
-                    challenges={dailyChallenges}
-                    loginStreak={gamificationData.loginStreak}
-                    onClaim={claimChallenge}
-                  />
-                </div>
-              )}
 
               <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 lg:grid-cols-4">
                 {SENSOR_KEYS.map((key, index) => (
@@ -633,13 +530,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── Achievements page ── */}
-          {activePage === "achievements" && (
-            <div className="animate-fade-in">
-              <AchievementsPage gamificationData={gamificationData} />
-            </div>
-          )}
-
           {/* ── Settings page ── */}
           {activePage === "settings" && (
             <div className="animate-fade-in">
@@ -677,12 +567,6 @@ export default function Dashboard() {
         initialSensor={activeSensor}
         history={effectiveChartHistory}
       />
-
-      {/* ── XP Earn Animation ── */}
-      <XpEarnPopup events={xpEvents} />
-
-      {/* ── Achievement Toast ── */}
-      <AchievementToast achievement={recentAchievement} />
 
       {/* ── Quick Action FAB (mobile only) ── */}
       {isMobile && activePage === "dashboard" && (

@@ -21,6 +21,7 @@ import type { SensorTelemetry, SensorKey } from "@/types/telemetry";
 import type { SensorRanges } from "@/hooks/useSensorRanges";
 import type { ConnectionStatus } from "@/types/telemetry";
 import type { AppNotification } from "@/types/notifications";
+import { isNotificationEnabled } from "@/lib/notificationPreferences";
 
 interface CriticalAlertsParams {
   userId: string;
@@ -93,6 +94,12 @@ export function useCriticalAlerts({
       }
 
       if (direction) {
+        const isCritical =
+          (key === "temperature" && (value > 45 || value < 5)) ||
+          (key === "waterLevel" && value < 10);
+        const severity: "critical" | "warning" = isCritical ? "critical" : "warning";
+        if (!isNotificationEnabled(severity)) return;
+
         lastAlertRef.current[alertKey] = now;
         const body =
           direction === "high"
@@ -130,6 +137,7 @@ export function useCriticalAlerts({
       const alertKey = "rover_offline";
       const lastAlert = lastAlertRef.current[alertKey] ?? 0;
       if (now - lastAlert < ALERT_COOLDOWN_MS) return;
+      if (!isNotificationEnabled("critical")) return;
 
       lastAlertRef.current[alertKey] = now;
       createNotification(

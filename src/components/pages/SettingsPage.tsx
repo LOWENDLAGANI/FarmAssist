@@ -37,6 +37,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { isSoundEnabled, setSoundEnabled, isHapticEnabled, setHapticEnabled } from "@/lib/notificationSound";
+import { getNotificationPrefs, setNotificationPref, isNotificationEnabled, type AlertSeverity } from "@/lib/notificationPreferences";
 import { createBackup, downloadBackup, parseBackup, applyBackup, type BackupData } from "@/lib/backupRestore";
 import { useSms } from "@/hooks/useSms";
 import { useAppTheme } from "../ThemeProvider";
@@ -290,6 +291,15 @@ export default function SettingsPage({
   const soundEnabled = isSoundEnabled();
   const hapticEnabled = isHapticEnabled();
 
+  // ── Notification severity preferences ────────────────────────
+  const [notifPrefs, setNotifPrefs] = useState(getNotificationPrefs);
+
+  const toggleNotifPref = (severity: AlertSeverity) => {
+    const current = notifPrefs[severity];
+    setNotificationPref(severity, !current);
+    setNotifPrefs(getNotificationPrefs());
+  };
+
   // ── Import result feedback ───────────────────────────────────
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -421,20 +431,22 @@ export default function SettingsPage({
 
   const handleTestNotification = () => {
     // Fire browser notification FIRST — must be synchronous in the click gesture
-    if (Notification.permission === "granted") {
+    if (Notification.permission === "granted" && isNotificationEnabled("info")) {
       new Notification("FarmAssist Test", {
         body: `Notifications are working for Rover "${deviceId}"!`,
         icon: "/favicon.ico",
       });
     }
     // Then write to notification center (fire-and-forget)
-    onCreateNotification(
-      userUID,
-      "sensor_alert",
-      "Test Notification",
-      `This is a test notification for Rover "${deviceId}". If you see this, notifications are working!`,
-      deviceId
-    );
+    if (isNotificationEnabled("info")) {
+      onCreateNotification(
+        userUID,
+        "sensor_alert",
+        "Test Notification",
+        `This is a test notification for Rover "${deviceId}". If you see this, notifications are working!`,
+        deviceId
+      );
+    }
   };
 
   return (
@@ -922,6 +934,72 @@ export default function SettingsPage({
           </button>
           <p className="mt-2 text-center text-[10px] text-slate-500">
             A browser notification and an in-app notification will be sent.
+          </p>
+        </div>
+
+        {/* Notification Preferences */}
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-6">
+          <h3 className="mb-3 text-sm font-semibold text-white">
+            Alert Preferences
+          </h3>
+          <p className="mb-3 text-xs text-slate-400">
+            Choose which alert severity levels you want to receive. Critical alerts are always recommended for safety.
+          </p>
+          <div className="space-y-2">
+            {/* Critical */}
+            <button
+              type="button"
+              onClick={() => toggleNotifPref("critical")}
+              className="flex w-full items-center justify-between rounded-xl bg-[#0a1628] p-3 transition-all hover:bg-[#0f2240]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🚨</span>
+                <div>
+                  <span className="text-sm text-slate-300">Critical Alerts</span>
+                  <p className="text-[10px] text-slate-500">Water empty, extreme temps, rover offline</p>
+                </div>
+              </div>
+              <span className={`text-xs font-medium ${notifPrefs.critical ? "text-cyan-400" : "text-slate-500"}`}>
+                {notifPrefs.critical ? "On" : "Off"}
+              </span>
+            </button>
+            {/* Warning */}
+            <button
+              type="button"
+              onClick={() => toggleNotifPref("warning")}
+              className="flex w-full items-center justify-between rounded-xl bg-[#0a1628] p-3 transition-all hover:bg-[#0f2240]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">⚠️</span>
+                <div>
+                  <span className="text-sm text-slate-300">Warning Alerts</span>
+                  <p className="text-[10px] text-slate-500">Sensor outside optimal range</p>
+                </div>
+              </div>
+              <span className={`text-xs font-medium ${notifPrefs.warning ? "text-cyan-400" : "text-slate-500"}`}>
+                {notifPrefs.warning ? "On" : "Off"}
+              </span>
+            </button>
+            {/* Info */}
+            <button
+              type="button"
+              onClick={() => toggleNotifPref("info")}
+              className="flex w-full items-center justify-between rounded-xl bg-[#0a1628] p-3 transition-all hover:bg-[#0f2240]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">ℹ️</span>
+                <div>
+                  <span className="text-sm text-slate-300">Info Notifications</span>
+                  <p className="text-[10px] text-slate-500">General updates and test alerts</p>
+                </div>
+              </div>
+              <span className={`text-xs font-medium ${notifPrefs.info ? "text-cyan-400" : "text-slate-500"}`}>
+                {notifPrefs.info ? "On" : "Off"}
+              </span>
+            </button>
+          </div>
+          <p className="mt-2 text-center text-[10px] text-slate-500">
+            Settings are saved locally in your browser.
           </p>
         </div>
 

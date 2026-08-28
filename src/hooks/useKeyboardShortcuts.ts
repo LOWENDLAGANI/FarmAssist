@@ -77,9 +77,6 @@ export function useKeyboardShortcuts({
         case "h":
           onNavigate("history");
           break;
-        case "a":
-          onNavigate("achievements");
-          break;
         case "s":
           onNavigate("settings");
           break;

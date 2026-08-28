@@ -54,54 +54,6 @@ export function SkeletonBanner() {
   );
 }
 
-/** Gamification bar skeleton. */
-export function SkeletonGamificationBar() {
-  return (
-    <div className="mb-6 flex items-center gap-4 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-3 sm:mb-8 sm:px-6 sm:py-4">
-      <div className="flex items-center gap-2">
-        <Shimmer className="h-10 w-10 rounded-xl" />
-        <div className="space-y-1">
-          <Shimmer className="h-3 w-12" />
-          <Shimmer className="h-4 w-16" />
-        </div>
-      </div>
-      <div className="flex-1 space-y-1.5">
-        <Shimmer className="h-2.5 w-full" />
-        <Shimmer className="h-2 w-20" />
-      </div>
-      <Shimmer className="h-6 w-12 rounded-full" />
-      <Shimmer className="h-6 w-12 rounded-full" />
-    </div>
-  );
-}
-
-/** Daily challenges skeleton. */
-export function SkeletonChallenges() {
-  return (
-    <div className="mb-6 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-4 sm:mb-8">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Shimmer className="h-5 w-5 rounded" />
-          <Shimmer className="h-4 w-28" />
-        </div>
-        <Shimmer className="h-5 w-16 rounded-full" />
-      </div>
-      <div className="space-y-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center gap-3 rounded-xl border border-cyan-900/20 bg-[#0a1628] p-3">
-            <Shimmer className="h-8 w-8 rounded-lg shrink-0" />
-            <div className="flex-1 space-y-1.5">
-              <Shimmer className="h-3.5 w-32" />
-              <Shimmer className="h-2.5 w-full" />
-            </div>
-            <Shimmer className="h-7 w-16 rounded-lg shrink-0" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /** Chart section skeleton. */
 export function SkeletonChart() {
   return (

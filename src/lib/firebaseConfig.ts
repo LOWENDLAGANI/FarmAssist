@@ -181,26 +181,6 @@ export function roverRegistryRef(deviceId: string): DatabaseReference {
   return ref(db, `rover_registry/${deviceId}`);
 }
 
-// ── Gamification ────────────────────────────────────────────
-
-/**
- * Reference to the gamification data node for a user.
- * Path: users/{uid}/gamification
- *
- * Shape: {
- *   xp: number,
- *   level: number,
- *   loginStreak: number,
- *   optimalStreak: number,
- *   lastStreakDate: string,
- *   achievements: { [id]: { unlocked: boolean, date?: string } },
- *   stats: { totalXpEarned, alertResponses, perfectDays, sessionsRun, totalUptimeMinutes }
- * }
- */
-export function gamificationRef(userId: string): DatabaseReference {
-  return ref(db, `users/${userId}/gamification`);
-}
-
 // ── Notifications ────────────────────────────────────────────
 
 /**

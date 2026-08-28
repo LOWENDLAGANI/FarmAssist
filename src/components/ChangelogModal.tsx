@@ -11,7 +11,7 @@
 import { useState, useEffect } from "react";
 import { Sparkles, X, PartyPopper } from "lucide-react";
 
-const CURRENT_VERSION = "1.0.0";
+const CURRENT_VERSION = "1.1.0";
 const STORAGE_KEY = "farmassist-changelog-version";
 
 interface ChangelogEntry {
@@ -22,16 +22,26 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.1.0",
+    date: "August 2026",
+    changes: [
+      { type: "new", text: "You can now install it on your device" },
+      { type: "new", text: "You can choose your own location" },
+      { type: "new", text: "You can choose what notifications to receive" },
+      { type: "improved", text: "Improved Ui" },
+    ],
+  },
+  {
     version: "1.0.0",
     date: "August 2026",
     changes: [
       { type: "new", text: "AI Assistant — chat with Hikari for help with FarmAssist" },
-      { type: "new", text: "Daily Challenges — complete tasks to earn bonus XP" },
-      { type: "new", text: "Achievements — unlock badges as you farm smarter" },
-      { type: "new", text: "Gamification — level up from Seedling to Farm Legend" },
       { type: "new", text: "Control Page — remote watering, fertilizer, and emergency stop" },
       { type: "new", text: "Weather Widget — see outdoor conditions for context" },
       { type: "new", text: "Onboarding Wizard — guided setup for new users" },
+      { type: "new", text: "PWA support — install FarmAssist and use it offline" },
+      { type: "new", text: "Custom weather location — set your location manually when geolocation is unavailable" },
+      { type: "new", text: "Notification preferences — choose which alert types to receive" },
       { type: "improved", text: "Loading skeletons for smoother transitions" },
       { type: "improved", text: "Keyboard shortcuts for desktop power users" },
       { type: "improved", text: "Better accessibility with ARIA labels and focus management" },
