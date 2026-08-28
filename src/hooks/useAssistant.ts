@@ -99,7 +99,9 @@ export function useAssistant() {
 
       setIsTyping(true);
       try {
-        const functions = getFunctions(app);
+        // Cloud Functions are deployed in Singapore; the SDK otherwise
+        // defaults to us-central1 and cannot find this callable.
+        const functions = getFunctions(app, "asia-southeast1");
         const callable = httpsCallable<
           { message: string; history: typeof history },
           { reply: string }

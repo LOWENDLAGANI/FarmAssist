@@ -20,7 +20,6 @@ import { onValueWritten, onValueUpdated } from "firebase-functions/v2/database";
 import * as logger from "firebase-functions/logger";
 import * as fs from "fs";
 import * as path from "path";
-
 initializeApp();
 
 const db = getDatabase();
@@ -30,6 +29,8 @@ const messaging = getMessaging();
 setGlobalOptions({ region: "asia-southeast1" });
 
 const ALERT_COOLDOWN_MS = 10 * 60 * 1000;
+const SMS_COOLDOWN_MS = 30 * 60 * 1000; // 30 min cooldown for SMS
+const OWNER_UID = "tsYo3zKfr8SSowOE23lPQe8Kb0v2";
 
 // Lazy-load cached system prompt to prevent top-level initialization timeouts
 let cachedSystemPrompt: string | null = null;
@@ -285,13 +286,26 @@ export const askAssistant = onCall(
       }
       const json = (await res.json()) as {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
+        promptFeedback?: { blockReason?: string; finishReason?: string };
       };
+      logger.info("Gemini response:", JSON.stringify({
+        hasCandidates: !!json.candidates?.length,
+        promptFeedback: json.promptFeedback,
+        candidateCount: json.candidates?.length ?? 0,
+      }));
+      if (json.promptFeedback?.blockReason) {
+        logger.error("Gemini blocked prompt:", json.promptFeedback.blockReason);
+        throw new HttpsError(
+          "internal",
+          "I couldn't respond to that — it may have been flagged by content filters."
+        );
+      }
       reply = json.candidates?.[0]?.content?.parts
         ?.map((p) => p.text ?? "")
         .join("")
         .trim();
-    } catch (err) {
-      logger.error("Gemini call failed:", err);
+    } catch (err: any) {
+      logger.error("Gemini call failed:", err?.message ?? err);
       throw new HttpsError(
         "internal",
         "The assistant had trouble responding. Please try again."
@@ -306,5 +320,123 @@ export const askAssistant = onCall(
     }
 
     return { reply };
+  }
+);
+
+// ── Twilio SMS Helper ────────────────────────────────────────────
+async function getTwilioClient() {
+  const twilio = (await import("twilio")).default;
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!accountSid || !authToken) {
+    throw new HttpsError(
+      "failed-precondition",
+      "SMS service is not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN."
+    );
+  }
+  return twilio(accountSid, authToken);
+}
+
+function getTwilioFromNumber(): string {
+  const from = process.env.TWILIO_PHONE_NUMBER;
+  if (!from) {
+    throw new HttpsError(
+      "failed-precondition",
+      "SMS service is not configured. Set TWILIO_PHONE_NUMBER."
+    );
+  }
+  return from;
+}
+
+// ── sendSms — callable; sends a test SMS ─────────────────────────
+export const sendSms = onCall(
+  { secrets: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Sign in to send SMS.");
+    }
+
+    // Only allow the owner to send test SMS
+    if (request.auth.uid !== OWNER_UID) {
+      throw new HttpsError("permission-denied", "Only the owner can send test SMS.");
+    }
+
+    const { to, body } = request.data as { to?: string; body?: string };
+
+    if (!to || typeof to !== "string") {
+      throw new HttpsError("invalid-argument", "A recipient phone number is required.");
+    }
+    if (!body || typeof body !== "string" || body.length > 1600) {
+      throw new HttpsError("invalid-argument", "SMS body must be 1–1600 characters.");
+    }
+
+    try {
+      const client = await getTwilioClient();
+      const message = await client.messages.create({
+        body,
+        from: getTwilioFromNumber(),
+        to,
+      });
+      logger.info(`SMS sent to ${to}: ${message.sid}`);
+      return { success: true, sid: message.sid };
+    } catch (err: any) {
+      logger.error("Twilio SMS failed:", err.message);
+      throw new HttpsError("internal", `SMS failed: ${err.message}`);
+    }
+  }
+);
+
+// ── onRoverOffline — SMS notification when rover goes offline ────
+export const onRoverOffline = onValueUpdated(
+  "/users/{uid}/devices/{deviceId}/status",
+  async (event) => {
+    const uid = event.params.uid;
+    const deviceId = event.params.deviceId;
+    const before = event.data.before.val();
+    const after = event.data.after.val();
+
+    // Only trigger on transition from live/stale → offline
+    if (before === after) return;
+    if (after !== "offline") return;
+    if (before !== "live" && before !== "stale") return;
+
+    // SMS cooldown check
+    const cooldownKey = `lastSmsOffline_${deviceId}`;
+    const cooldownSnap = await db
+      .ref(`_cooldowns/${uid}/${cooldownKey}`)
+      .get();
+    const lastSms = cooldownSnap.val() ?? 0;
+    if (Date.now() - lastSms < SMS_COOLDOWN_MS) return;
+    await db.ref(`_cooldowns/${uid}/${cooldownKey}`).set(Date.now());
+
+    // Get user's phone number
+    const phoneSnap = await db.ref(`users/${uid}/phoneNumber`).get();
+    const phoneNumber = phoneSnap.val();
+    if (!phoneNumber) {
+      logger.info(`No phone number for ${uid}, skipping SMS for rover offline.`);
+      return;
+    }
+
+    // Get Twilio credentials
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+    if (!accountSid || !authToken || !fromNumber) {
+      logger.warn("Twilio env vars not set, skipping SMS.");
+      return;
+    }
+
+    try {
+      const twilio = (await import("twilio")).default;
+      const client = twilio(accountSid, authToken);
+      await client.messages.create({
+        body: `🚨 FarmAssist Alert: Rover "${deviceId}" has gone offline. Please check power and WiFi connection.`,
+        from: fromNumber,
+        to: phoneNumber,
+      });
+      logger.info(`Offline SMS sent to ${phoneNumber} for rover ${deviceId}`);
+    } catch (err: any) {
+      logger.error(`Offline SMS failed for ${uid}:`, err.message);
+    }
   }
 );

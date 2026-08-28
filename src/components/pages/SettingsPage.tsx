@@ -34,9 +34,11 @@ import {
   UploadCloud,
   HardDrive,
   Archive,
+  MessageSquare,
 } from "lucide-react";
 import { isSoundEnabled, setSoundEnabled, isHapticEnabled, setHapticEnabled } from "@/lib/notificationSound";
 import { createBackup, downloadBackup, parseBackup, applyBackup, type BackupData } from "@/lib/backupRestore";
+import { useSms } from "@/hooks/useSms";
 import { useAppTheme } from "../ThemeProvider";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
 import RoverOverviewCard from "../RoverOverviewCard";
@@ -290,6 +292,9 @@ export default function SettingsPage({
 
   // ── Import result feedback ───────────────────────────────────
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // ── SMS notifications (owner only) ──────────────────────────
+  const sms = useSms(userUID);
 
   // ── Local editing state for ranges ──────────────────────────
   const [editingRanges, setEditingRanges] = useState<SensorRanges>(sensorRanges);
@@ -1041,6 +1046,59 @@ export default function SettingsPage({
             )}
           </div>
         </div>
+
+        {/* SMS Notifications (owner only) */}
+        {sms.isOwner && (
+          <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-6">
+            <h3 className="mb-1 text-sm font-semibold text-white">SMS Alerts</h3>
+            <p className="mb-3 text-xs text-slate-400">
+              Receive an SMS when your Rover goes offline. Only offline alerts are sent via SMS — all other notifications stay in-app.
+            </p>
+
+            {/* Phone number input */}
+            <div className="mb-3">
+              <label className="mb-1 block text-xs text-slate-500">Phone Number</label>
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  value={sms.phoneNumber}
+                  onChange={(e) => sms.savePhoneNumber(e.target.value)}
+                  placeholder="+66xxxxxxxxx"
+                  className="flex-1 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-3 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-all focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20"
+                />
+              </div>
+              <p className="mt-1 text-[10px] text-slate-500">
+                Include country code (e.g. +66 for Thailand)
+              </p>
+            </div>
+
+            {/* Test SMS button */}
+            <button
+              onClick={sms.sendTestSms}
+              disabled={sms.sending || !sms.phoneNumber}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-all hover:bg-cyan-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:hover:bg-cyan-500/20 disabled:hover:scale-100"
+            >
+              {sms.sending ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+                  Sending…
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="h-4 w-4" />
+                  Send Test SMS
+                </>
+              )}
+            </button>
+
+            {/* Send result */}
+            {sms.sendResult && (
+              <p className={`mt-2 text-center text-xs ${sms.sendResult.success ? "text-emerald-400" : "text-red-400"}`}>
+                {sms.sendResult.message}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* About */}
         <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-7">
