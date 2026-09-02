@@ -57,7 +57,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="h-screen overflow-hidden">
+      <body className="h-screen overflow-auto">
         <AuthProvider>
           <ThemeProvider>
             {children}

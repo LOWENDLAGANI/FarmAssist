@@ -11,11 +11,12 @@
 
 import { useState } from "react";
 import { ref, remove } from "firebase/database";
-import { deleteUser, updateProfile, linkWithPopup, GoogleAuthProvider, type UserCredential } from "firebase/auth";
+import { deleteUser, updateProfile, linkWithPopup, unlink, GoogleAuthProvider, EmailAuthProvider, linkWithCredential } from "firebase/auth";
 import { useAuth } from "../AuthProvider";
 import { useAppTheme } from "../ThemeProvider";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
 import { db, auth } from "@/lib/firebaseConfig";
+import GoogleIcon from "../GoogleIcon";
 import {
   User,
   Mail,
@@ -31,11 +32,10 @@ import {
   Loader2,
   LifeBuoy,
   Pencil,
-  Zap,
   Link as LinkIcon,
+  Lock,
 } from "lucide-react";
-// Zap is imported but unused — kept to satisfy Turbopack module cache until server restart
-void Zap;
+
 
 /* ── Support channels ─────────────────────────────────────────── */
 /* ✏️ EDIT THESE with your real support links before production!  */
@@ -128,6 +128,13 @@ export default function AccountPage() {
   const [linkingGoogle, setLinkingGoogle] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkSuccess, setLinkSuccess] = useState(false);
+  const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
+  const [unlinkSuccess, setUnlinkSuccess] = useState(false);
+  const [unlinkConfirmProvider, setUnlinkConfirmProvider] = useState<string | null>(null);
+  const [showLinkEmailModal, setShowLinkEmailModal] = useState(false);
+  const [linkEmailInput, setLinkEmailInput] = useState("");
+  const [linkPasswordInput, setLinkPasswordInput] = useState("");
+  const [linkingEmail, setLinkingEmail] = useState(false);
 
   const displayName = user?.displayName ?? "FarmAssist User";
   const email = user?.email ?? "No email linked";
@@ -137,11 +144,13 @@ export default function AccountPage() {
   const linkedProviders = (user?.providerData ?? []).map((p) => p.providerId);
   const hasGoogle = linkedProviders.includes("google.com");
   const hasEmail = linkedProviders.includes("password");
-  const signInMethod = hasGoogle
-    ? "Google account"
-    : hasEmail
-      ? "Email / password"
-      : "Unknown";
+  const signInMethod = hasGoogle && hasEmail
+    ? "Google + Email"
+    : hasGoogle
+      ? "Google account"
+      : hasEmail
+        ? "Email / password"
+        : "Unknown";
   const memberSince = user?.metadata?.creationTime
     ? new Date(user.metadata.creationTime).toLocaleDateString(undefined, {
         year: "numeric",
@@ -217,6 +226,71 @@ export default function AccountPage() {
       }
     } finally {
       setLinkingGoogle(false);
+    }
+  };
+
+  // ── Unlink any linked provider ────────────────────────────────
+  const handleUnlinkProvider = async (providerId: string) => {
+    if (!user) return;
+    setUnlinkingProvider(providerId);
+    setLinkError(null);
+    setUnlinkSuccess(false);
+    try {
+      if (user.providerData.length <= 1) {
+        setLinkError("Cannot unlink your only sign-in method. Please link another method first.");
+        return;
+      }
+      await unlink(user, providerId);
+      setUnlinkSuccess(true);
+      await user.reload();
+      setTimeout(() => setUnlinkSuccess(false), 3000);
+    } catch (err) {
+      console.error("[AccountPage] Unlink failed:", err);
+      const code = err instanceof Error ? (err as { code?: string }).code : undefined;
+      const label = providerId === "google.com" ? "Google" : "email";
+      if (code === "auth/no-visible-user") {
+        setLinkError("No user is currently signed in. Please sign in and try again.");
+      } else if (code === "auth/requires-recent-login") {
+        setLinkError(`For security, please sign out and sign back in before unlinking ${label}.`);
+      } else {
+        setLinkError(`Failed to unlink ${label}. Please try again.`);
+      }
+    } finally {
+      setUnlinkingProvider(null);
+    }
+  };
+
+  // ── Link Email/Password account ──────────────────────────────
+  const handleLinkEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setLinkingEmail(true);
+    setLinkError(null);
+    try {
+      const credential = EmailAuthProvider.credential(linkEmailInput.trim(), linkPasswordInput);
+      await linkWithCredential(user, credential);
+      setShowLinkEmailModal(false);
+      setLinkEmailInput("");
+      setLinkPasswordInput("");
+      setLinkSuccess(true);
+      await user.reload();
+      setTimeout(() => setLinkSuccess(false), 3000);
+    } catch (err) {
+      console.error("[AccountPage] Email link failed:", err);
+      const code = err instanceof Error ? (err as { code?: string }).code : undefined;
+      if (code === "auth/provider-already-linked") {
+        setLinkError("Your account is already linked with Email & Password.");
+      } else if (code === "auth/credential-already-in-use") {
+        setLinkError("An account with this email already exists. Please use a different email.");
+      } else if (code === "auth/weak-password") {
+        setLinkError("Password must be at least 6 characters.");
+      } else if (code === "auth/invalid-email") {
+        setLinkError("Please enter a valid email address.");
+      } else {
+        setLinkError("Failed to link email. Please try again.");
+      }
+    } finally {
+      setLinkingEmail(false);
     }
   };
 
@@ -381,7 +455,7 @@ export default function AccountPage() {
                   <div className="mt-2 flex flex-wrap gap-1.5 pl-7">
                     {hasGoogle && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-400">
-                        <svg className="h-3 w-3" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                        <GoogleIcon className="h-3 w-3" />
                         Google
                       </span>
                     )}
@@ -429,12 +503,13 @@ export default function AccountPage() {
           <div>
             <h3 className="text-sm font-semibold text-white">Bind / Link Account</h3>
             <p className="mt-0.5 text-xs text-slate-400">
-              Connect another sign-in method to this FarmAssist account.
+              Connect or disconnect sign-in methods for this account.
             </p>
           </div>
         </div>
 
         <div className="space-y-2">
+          {/* Google provider */}
           {!hasGoogle && (
             <button
               type="button"
@@ -446,7 +521,7 @@ export default function AccountPage() {
               {linkingGoogle ? (
                 <Loader2 className="h-5 w-5 shrink-0 animate-spin text-slate-400" />
               ) : (
-                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                <GoogleIcon className="h-5 w-5 shrink-0" />
               )}
               <div className="min-w-0 text-left">
                 <span className="text-sm font-medium text-slate-200">Bind / Link Google Account</span>
@@ -455,24 +530,81 @@ export default function AccountPage() {
             </button>
           )}
           {hasGoogle && (
-            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
-              <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-              <span className="text-sm font-medium text-emerald-400">Google account linked</span>
+            <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <GoogleIcon className="h-5 w-5 shrink-0" />
+                <span className="text-sm font-medium text-emerald-400">Google linked</span>
+              </div>
+              {user?.providerData && user.providerData.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setUnlinkConfirmProvider("google.com")}
+                  disabled={!!unlinkingProvider}
+                  className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-all hover:bg-red-500/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                >
+                  {unlinkingProvider === "google.com" ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <X className="h-3 w-3" />
+                  )}
+                  Unlink
+                </button>
+              )}
             </div>
           )}
 
+          {/* Email provider */}
+          {hasEmail && (
+            <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Mail className="h-5 w-5 shrink-0 text-emerald-400" />
+                <span className="text-sm font-medium text-emerald-400">Email &amp; Password linked</span>
+              </div>
+              {user?.providerData && user.providerData.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setUnlinkConfirmProvider("password")}
+                  disabled={!!unlinkingProvider}
+                  className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-all hover:bg-red-500/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                >
+                  {unlinkingProvider === "password" ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                  Unlink
+                </button>
+              )}
+            </div>
+          )}
           {!hasEmail && (
+            <button
+              type="button"
+              onClick={() => { setLinkError(null); setShowLinkEmailModal(true); }}
+              disabled={linkingEmail}
+              className="flex w-full items-center gap-3 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-3 transition-all hover:border-lime-500/40 hover:bg-[#0f2240] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Mail className="h-5 w-5 shrink-0 text-lime-400" />
+              <div className="min-w-0 text-left">
+                <span className="text-sm font-medium text-slate-200">Bind / Link Email &amp; Password</span>
+                <span className="block text-[11px] text-slate-500">Add email/password as a backup sign-in method</span>
+              </div>
+            </button>
+          )}
+
+          {hasEmail && !hasGoogle && (
             <p className="text-xs text-slate-500 px-1">
-              Email &amp; Password is your primary sign-in method for this account.
+              Email &amp; Password is your primary sign-in method.
+            </p>
+          )}
+          {hasGoogle && !hasEmail && (
+            <p className="text-xs text-slate-500 px-1">
+              Google is your primary sign-in method.
             </p>
           )}
         </div>
 
         {/* Link success message */}
-        {linkSuccess && (
+        {(linkSuccess || unlinkSuccess) && (
           <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
             <p className="text-center text-sm text-emerald-400">
-              Google account linked successfully!
+              {unlinkSuccess ? "Account unlinked successfully!" : "Account linked successfully!"}
             </p>
           </div>
         )}
@@ -484,6 +616,84 @@ export default function AccountPage() {
           </div>
         )}
       </div>
+
+      {/* ── Link Email Modal ── */}
+      {showLinkEmailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in"
+            onClick={() => !linkingEmail && setShowLinkEmailModal(false)}
+          />
+          <div className="relative w-full max-w-sm rounded-2xl border border-cyan-500/30 bg-[#0c1a2e] shadow-2xl shadow-cyan-950/50 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-cyan-900/30 bg-[#0a1628] px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-500/15">
+                  <Mail className="h-5 w-5 text-lime-400" />
+                </div>
+                <h3 className="text-base font-semibold text-white">Link Email &amp; Password</h3>
+              </div>
+              <button
+                onClick={() => !linkingEmail && setShowLinkEmailModal(false)}
+                disabled={linkingEmail}
+                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleLinkEmail} className="space-y-3 px-6 py-5">
+              <p className="text-sm text-slate-300">
+                Enter the email and password you&apos;d like to link as a backup sign-in method.
+              </p>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-400/50" />
+                <input
+                  type="email"
+                  placeholder="Email address"
+                  value={linkEmailInput}
+                  onChange={(e) => setLinkEmailInput(e.target.value)}
+                  autoComplete="email"
+                  autoFocus
+                  className="w-full rounded-xl border border-cyan-500/30 bg-[#0a1628] py-3 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400/60 focus:outline-none"
+                />
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-400/50" />
+                <input
+                  type="password"
+                  placeholder="Password (at least 6 characters)"
+                  value={linkPasswordInput}
+                  onChange={(e) => setLinkPasswordInput(e.target.value)}
+                  autoComplete="new-password"
+                  className="w-full rounded-xl border border-cyan-500/30 bg-[#0a1628] py-3 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400/60 focus:outline-none"
+                />
+              </div>
+              {linkError && (
+                <div className="rounded-xl border border-red-800/40 bg-red-950/30 p-3">
+                  <p className="text-xs text-red-400">{linkError}</p>
+                </div>
+              )}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLinkEmailModal(false)}
+                  disabled={linkingEmail}
+                  className="rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2 text-sm text-slate-400 transition-all hover:bg-[#0f2240] hover:text-white disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={linkingEmail || !linkEmailInput.trim() || linkPasswordInput.length < 6}
+                  className="flex items-center gap-2 rounded-xl bg-lime-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-lime-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {linkingEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : <LinkIcon className="h-4 w-4" />}
+                  {linkingEmail ? "Linking..." : "Link Account"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ── Contact Support ── */}
       <div className="mt-6 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up">
@@ -629,6 +839,70 @@ export default function AccountPage() {
                   <>
                     <Trash2 className="h-4 w-4" />
                     Delete forever
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Unlink provider confirmation dialog ── */}
+      {unlinkConfirmProvider && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in"
+            onClick={() => !unlinkingProvider && setUnlinkConfirmProvider(null)}
+          />
+          <div className="relative w-full max-w-sm rounded-2xl border border-red-500/30 bg-[#0c1a2e] shadow-2xl shadow-red-950/50 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-red-900/30 bg-red-950/30 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/20">
+                  <AlertTriangle className="h-5 w-5 text-red-400" />
+                </div>
+                <h3 className="text-base font-semibold text-white">
+                  Unlink {unlinkConfirmProvider === "google.com" ? "Google" : "Email & Password"}?
+                </h3>
+              </div>
+              <button
+                onClick={() => setUnlinkConfirmProvider(null)}
+                disabled={!!unlinkingProvider}
+                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-sm leading-relaxed text-slate-300">
+                You will no longer be able to sign in using {unlinkConfirmProvider === "google.com" ? "your Google account" : "email and password"}.
+                {" "}You can re-link it later from Account Settings.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-red-900/20 px-6 py-4">
+              <button
+                onClick={() => setUnlinkConfirmProvider(null)}
+                disabled={!!unlinkingProvider}
+                className="rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2 text-sm text-slate-400 transition-all hover:bg-[#0f2240] hover:text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleUnlinkProvider(unlinkConfirmProvider);
+                  setUnlinkConfirmProvider(null);
+                }}
+                disabled={!!unlinkingProvider}
+                className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-red-500 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {unlinkingProvider ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Unlinking...
+                  </>
+                ) : (
+                  <>
+                    <X className="h-4 w-4" />
+                    Unlink
                   </>
                 )}
               </button>
