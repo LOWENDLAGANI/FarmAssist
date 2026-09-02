@@ -9,29 +9,19 @@
 "use client";
 
 import Image from "next/image";
-import { Cloud, Wifi, WifiOff, LogOut } from "lucide-react";
+import { Wifi, WifiOff, LogOut } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import type { ConnectionStatus } from "@/types/telemetry";
-import type { AppNotification } from "@/types/notifications";
-import NotificationCenter from "./NotificationCenter";
 
 interface TopBarProps {
   status: ConnectionStatus;
   lastUpdated?: number | null;
   deviceId?: string;
-  notifications: AppNotification[];
-  unreadCount: number;
-  onMarkRead: (id: string) => void;
-  onMarkAllRead: () => void;
 }
 
 export default function TopBar({
   status,
   deviceId,
-  notifications,
-  unreadCount,
-  onMarkRead,
-  onMarkAllRead,
 }: TopBarProps) {
   const { user, logOut } = useAuth();
   const isLive = status === "live";
@@ -53,17 +43,6 @@ export default function TopBar({
 
       {/* ── Right: Status + User ── */}
       <div className="flex items-center gap-3">
-        {/* Notification center */}
-        <NotificationCenter
-          notifications={notifications}
-          unreadCount={unreadCount}
-          onMarkRead={onMarkRead}
-          onMarkAllRead={onMarkAllRead}
-        />
-
-        {/* Cloud icon */}
-        <Cloud className="h-5 w-5 text-slate-400" />
-
         {/* WiFi status */}
         <div className="flex items-center gap-1.5">
           {isLive ? (

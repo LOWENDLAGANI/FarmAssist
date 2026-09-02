@@ -5,12 +5,18 @@
  * Provides actions like start watering, apply fertilizer,
  * manual override, and emergency stop — each with a
  * confirmation dialog before execution.
+ *
+ * Commands are written to Firebase RTDB at:
+ *   users/{uid}/devices/{deviceId}/commands/{commandId}
+ * The ESP32 polls this path and executes the command.
  * ─────────────────────────────────────────────────────────────────
  */
 
 "use client";
 
 import { useState, useCallback } from "react";
+import { push, set, serverTimestamp } from "firebase/database";
+import { commandsRef } from "@/lib/firebaseConfig";
 import {
   Droplets,
   Flower2,
@@ -22,6 +28,8 @@ import {
   X,
   Sun,
   Camera,
+  Loader2,
+  AlertCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -134,11 +142,12 @@ const CONTROL_ACTIONS: ControlAction[] = [
 
 interface ConfirmDialogProps {
   action: ControlAction;
+  sending: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-function ConfirmDialog({ action, onConfirm, onCancel }: ConfirmDialogProps) {
+function ConfirmDialog({ action, sending, onConfirm, onCancel }: ConfirmDialogProps) {
   const Icon = action.icon;
 
   return (
@@ -170,7 +179,8 @@ function ConfirmDialog({ action, onConfirm, onCancel }: ConfirmDialogProps) {
           <button
             type="button"
             onClick={onCancel}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700/50 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-300 transition-all hover:bg-slate-700/50 active:scale-95"
+            disabled={sending}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700/50 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-300 transition-all hover:bg-slate-700/50 active:scale-95 disabled:opacity-50"
           >
             <X className="h-4 w-4" />
             Cancel
@@ -178,14 +188,24 @@ function ConfirmDialog({ action, onConfirm, onCancel }: ConfirmDialogProps) {
           <button
             type="button"
             onClick={onConfirm}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white transition-all active:scale-95 ${
+            disabled={sending}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-60 ${
               action.destructive
                 ? "bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/20"
                 : "bg-cyan-600 hover:bg-cyan-500 shadow-lg shadow-cyan-600/20"
             }`}
           >
-            <Check className="h-4 w-4" />
-            Confirm
+            {sending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Sending…
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4" />
+                Confirm
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -193,14 +213,16 @@ function ConfirmDialog({ action, onConfirm, onCancel }: ConfirmDialogProps) {
   );
 }
 
-/* ── Action executed feedback ───────────────────────────────── */
+/* ── Action Result Dialog ───────────────────────────────────── */
 
-interface ActionFeedbackProps {
+interface ActionResultProps {
   action: ControlAction;
+  status: "success" | "error";
+  errorMessage?: string;
   onDismiss: () => void;
 }
 
-function ActionFeedback({ action, onDismiss }: ActionFeedbackProps) {
+function ActionResult({ action, status, errorMessage, onDismiss }: ActionResultProps) {
   const Icon = action.icon;
 
   return (
@@ -214,24 +236,47 @@ function ActionFeedback({ action, onDismiss }: ActionFeedbackProps) {
       >
         <div className="mb-4 flex flex-col items-center text-center">
           <div
-            className={`mb-3 flex h-14 w-14 items-center justify-center rounded-2xl ${action.bgColor}`}
+            className={`mb-3 flex h-14 w-14 items-center justify-center rounded-2xl ${
+              status === "success" ? action.bgColor : "bg-red-500/15"
+            }`}
           >
-            <Icon className={`h-7 w-7 ${action.color}`} />
+            {status === "success" ? (
+              <Icon className={`h-7 w-7 ${action.color}`} />
+            ) : (
+              <AlertCircle className="h-7 w-7 text-red-400" />
+            )}
           </div>
-          <h3 className="text-lg font-bold text-white">Command Sent!</h3>
+          <h3 className="text-lg font-bold text-white">
+            {status === "success" ? "Command Sent!" : "Failed to Send"}
+          </h3>
         </div>
 
         <p className="mb-6 text-center text-sm text-slate-400">
-          The <span className="font-medium text-slate-200">{action.label}</span>{" "}
-          command has been sent to the rover.
+          {status === "success" ? (
+            <>
+              The <span className="font-medium text-slate-200">{action.label}</span>{" "}
+              command has been sent to the rover.
+            </>
+          ) : (
+            <>
+              Could not send the <span className="font-medium text-slate-200">{action.label}</span> command.
+              {errorMessage && (
+                <span className="mt-1 block text-xs text-red-400">{errorMessage}</span>
+              )}
+            </>
+          )}
         </p>
 
         <button
           type="button"
           onClick={onDismiss}
-          className="w-full rounded-xl bg-cyan-600 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-cyan-500 active:scale-95"
+          className={`w-full rounded-xl px-4 py-3 text-sm font-bold text-white transition-all hover:active:scale-95 ${
+            status === "success"
+              ? "bg-cyan-600 hover:bg-cyan-500"
+              : "bg-red-600 hover:bg-red-500"
+          }`}
         >
-          Got it
+          {status === "success" ? "Got it" : "Try Again"}
         </button>
       </div>
     </div>
@@ -240,28 +285,58 @@ function ActionFeedback({ action, onDismiss }: ActionFeedbackProps) {
 
 /* ── Main ControlPage ───────────────────────────────────────── */
 
-export default function ControlPage() {
+interface ControlPageProps {
+  userId: string;
+  deviceId: string;
+}
+
+export default function ControlPage({ userId, deviceId }: ControlPageProps) {
   const [pendingAction, setPendingAction] = useState<ControlAction | null>(null);
-  const [completedAction, setCompletedAction] = useState<ControlAction | null>(null);
+  const [sending, setSending] = useState(false);
+  const [resultAction, setResultAction] = useState<ControlAction | null>(null);
+  const [resultStatus, setResultStatus] = useState<"success" | "error">("success");
+  const [resultError, setResultError] = useState<string | undefined>();
 
   const handleActionClick = useCallback((action: ControlAction) => {
     setPendingAction(action);
   }, []);
 
-  const handleConfirm = useCallback(() => {
-    if (!pendingAction) return;
+  const handleConfirm = useCallback(async () => {
+    if (!pendingAction || !userId || !deviceId) return;
     const action = pendingAction;
     setPendingAction(null);
-    // Show feedback after a tiny delay so the confirm dialog unmounts first
-    setTimeout(() => setCompletedAction(action), 100);
-  }, [pendingAction]);
+    setSending(true);
+
+    try {
+      // Write command to Firebase RTDB
+      // Path: users/{uid}/devices/{deviceId}/commands/{commandId}
+      const newRef = push(commandsRef(userId, deviceId));
+      await set(newRef, {
+        action: action.id,
+        timestamp: Date.now(),
+        status: "pending",
+      });
+
+      setResultStatus("success");
+      setResultError(undefined);
+    } catch (err) {
+      console.error(`[ControlPage] Failed to send command "${action.id}":`, err);
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setResultStatus("error");
+      setResultError(message);
+    } finally {
+      setSending(false);
+      // Show result dialog after a tiny delay so the confirm dialog unmounts first
+      setTimeout(() => setResultAction(action), 100);
+    }
+  }, [pendingAction, userId, deviceId]);
 
   const handleCancel = useCallback(() => {
     setPendingAction(null);
   }, []);
 
-  const handleDismissFeedback = useCallback(() => {
-    setCompletedAction(null);
+  const handleDismissResult = useCallback(() => {
+    setResultAction(null);
   }, []);
 
   return (
@@ -274,6 +349,14 @@ export default function ControlPage() {
         </p>
       </div>
 
+      {/* Rover info */}
+      <div className="mb-4 flex items-center gap-2 rounded-xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-2.5">
+        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        <span className="text-xs text-slate-400">
+          Sending commands to <span className="font-mono text-cyan-400">{deviceId}</span>
+        </span>
+      </div>
+
       {/* Action grid */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {CONTROL_ACTIONS.map((action, index) => {
@@ -283,14 +366,15 @@ export default function ControlPage() {
               key={action.id}
               type="button"
               onClick={() => handleActionClick(action)}
-              className={`group relative flex flex-col items-start overflow-hidden rounded-2xl border p-5 text-left backdrop-blur-md transition-all hover:scale-[1.02] active:scale-[0.98] animate-slide-up bg-[#0c1a2e]/95 ${
+              disabled={sending}
+              className={`group relative flex flex-col items-start overflow-hidden rounded-2xl border p-5 text-left backdrop-blur-md transition-all hover:scale-[1.02] active:scale-[0.98] animate-slide-up bg-[#0c1a2e]/95 disabled:opacity-50 disabled:cursor-not-allowed ${
                 action.destructive
                   ? "border-red-500/30"
                   : action.borderColor
               }`}
               style={{ animationDelay: `${index * 0.05}s` }}
             >
-              {/* Colored tint over the solid panel — adapts to any background without going transparent */}
+              {/* Colored tint over the solid panel */}
               <div
                 className={`pointer-events-none absolute inset-0 transition-opacity duration-200 group-hover:opacity-50 ${action.bgColor}`}
               />
@@ -317,22 +401,28 @@ export default function ControlPage() {
         })}
       </div>
 
-      {/* Quick actions */}
+      {/* Quick Presets */}
       <div className="mt-6">
         <h3 className="mb-3 text-sm font-bold text-slate-300">Quick Presets</h3>
         <div className="flex flex-wrap gap-2">
           {[
-            "Morning Routine",
-            "Evening Check",
-            "Full Maintenance",
-            "Water Only",
+            { label: "Morning Routine", actions: ["lighting", "watering"] },
+            { label: "Evening Check", actions: ["watering"] },
+            { label: "Full Maintenance", actions: ["watering", "fertilizer", "lighting"] },
+            { label: "Water Only", actions: ["watering"] },
           ].map((preset) => (
             <button
-              key={preset}
+              key={preset.label}
               type="button"
-              className="rounded-xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-2 text-xs font-medium text-slate-300 transition-all hover:border-cyan-500/30 hover:text-cyan-400 active:scale-95"
+              disabled={sending}
+              onClick={() => {
+                // Send the first action as a quick command
+                const firstAction = CONTROL_ACTIONS.find((a) => preset.actions.includes(a.id));
+                if (firstAction) handleActionClick(firstAction);
+              }}
+              className="rounded-xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-2 text-xs font-medium text-slate-300 transition-all hover:border-cyan-500/30 hover:text-cyan-400 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {preset}
+              {preset.label}
             </button>
           ))}
         </div>
@@ -342,16 +432,19 @@ export default function ControlPage() {
       {pendingAction && (
         <ConfirmDialog
           action={pendingAction}
+          sending={sending}
           onConfirm={handleConfirm}
           onCancel={handleCancel}
         />
       )}
 
-      {/* ── Action feedback dialog ── */}
-      {completedAction && (
-        <ActionFeedback
-          action={completedAction}
-          onDismiss={handleDismissFeedback}
+      {/* ── Result dialog ── */}
+      {resultAction && (
+        <ActionResult
+          action={resultAction}
+          status={resultStatus}
+          errorMessage={resultError}
+          onDismiss={handleDismissResult}
         />
       )}
     </div>

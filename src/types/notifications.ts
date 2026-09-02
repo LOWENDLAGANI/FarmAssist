@@ -5,14 +5,12 @@
  *
  * Only critical alerts are pushed:
  *  • sensor_alert  — sensor value breached a configured threshold
- *  • force_pair    — another user claimed your Rover
  *  • rover_offline — Rover stopped sending heartbeats
  * ─────────────────────────────────────────────────────────────────
  */
 
 export type NotificationType =
   | "sensor_alert"
-  | "force_pair"
   | "rover_offline";
 
 export interface AppNotification {

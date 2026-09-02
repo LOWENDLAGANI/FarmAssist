@@ -1,22 +1,33 @@
 /**
  * LoginPage.tsx
  * ─────────────────────────────────────────────────────────────────
- * Sign-in page with Google authentication and Guest mode.
+ * Sign-in page with Google authentication, Email/Password login,
+ * account registration, and forgot password flow.
  *
  * 🎨 Poster-style design (green gradient, mascot, wordmark + tagline).
  *
  * 🖼️ MASCOT SETUP:
  * Drop your mascot picture at:   public/farmassist-mascot.png
- * (A transparent PNG looks best. If missing, a sprout icon
- *  is shown instead — the page still works fine.)
  * ─────────────────────────────────────────────────────────────────
  */
 
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useAuth } from "./AuthProvider";
-import { Sprout, Loader2, User, Zap, Leaf, Sparkles } from "lucide-react";
+import {
+  Sprout,
+  Loader2,
+  Mail,
+  Lock,
+  Leaf,
+  Sparkles,
+  KeyRound,
+  ArrowLeft,
+  CheckCircle,
+  UserPlus,
+  User,
+} from "lucide-react";
 
 /** Decorative floating leaves scattered around the screen */
 const DECOR_LEAVES = [
@@ -28,32 +39,158 @@ const DECOR_LEAVES = [
   { className: "right-[30%] bottom-[8%] h-7 w-7 rotate-[-30deg]", delay: "2s" },
 ];
 
-export default function LoginPage() {
-  const { signInWithGoogle, signInAsGuest } = useAuth();
-  const [error, setError] = useState<string | null>(null);
-  const [signingIn, setSigningIn] = useState(false);
+type ViewMode = "signin" | "register" | "forgot";
 
-  const handleSignIn = async () => {
+/** Friendly error messages for Firebase auth error codes */
+function friendlyError(code?: string): string {
+  switch (code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "Incorrect email or password. Please check your credentials and try again.";
+    case "auth/email-already-in-use":
+      return "An account with this email already exists. Try signing in instead, or use a different email.";
+    case "auth/weak-password":
+      return "Your password is too weak. Please use at least 6 characters with a mix of letters and numbers.";
+    case "auth/invalid-email":
+      return "That doesn't look like a valid email address. Please double-check it.";
+    case "auth/too-many-requests":
+      return "Too many failed attempts. Please wait a moment and try again.";
+    case "auth/network-request-failed":
+      return "Network error — please check your internet connection and try again.";
+    case "auth/user-disabled":
+      return "This account has been disabled. Please contact support for help.";
+    case "auth/operation-not-allowed":
+      return "This sign-in method is not enabled. Please contact support.";
+    case "auth/popup-closed-by-user":
+      return "Sign-in popup was closed. Please try again when you're ready.";
+    case "auth/popup-blocked":
+      return "The sign-in popup was blocked by your browser. Please allow popups for this site.";
+    case "auth/account-exists-with-different-credential":
+      return "An account already exists with this email using a different sign-in method. Try signing in with Google instead.";
+    default:
+      return "Something went wrong. Please try again in a moment.";
+  }
+}
+
+export default function LoginPage() {
+  const { signInWithGoogle, signInWithEmail, registerWithEmail, sendPasswordReset } = useAuth();
+
+  const [view, setView] = useState<ViewMode>("signin");
+
+  // ── Sign-in fields ──
+  const [signInEmail, setSignInEmail] = useState("");
+  const [signInPassword, setSignInPassword] = useState("");
+
+  // ── Register fields ──
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regConfirm, setRegConfirm] = useState("");
+
+  // ── Forgot password fields ──
+  const [resetEmail, setResetEmail] = useState("");
+
+  // ── UI state ──
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const clearErrors = () => setError(null);
+
+  // ── Switch views ──
+  const goToSignIn = () => { setView("signin"); clearErrors(); };
+  const goToRegister = () => { setView("register"); clearErrors(); setResetSent(false); };
+  const goToForgot = () => { setView("forgot"); setResetEmail(signInEmail.trim()); clearErrors(); setResetSent(false); };
+
+  // ── Google Sign-In ──
+  const handleGoogleSignIn = async () => {
     setError(null);
-    setSigningIn(true);
+    setLoading(true);
     try {
       await signInWithGoogle();
     } catch (err) {
-      console.error("[LoginPage] Sign-in failed:", err);
-      const message =
-        err instanceof Error ? err.message : "Sign-in failed. Please try again.";
-      setError(message);
+      console.error("[LoginPage] Google sign-in failed:", err);
+      setError(friendlyError(err instanceof Error ? (err as { code?: string }).code : undefined));
     } finally {
-      setSigningIn(false);
+      setLoading(false);
     }
   };
 
-  const handleGuestSignIn = () => {
-    signInAsGuest();
+  // ── Email/Password Sign-In ──
+  const handleEmailSignIn = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!signInEmail.trim() || !signInPassword.trim()) {
+      setError("Please enter both your email and password.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await signInWithEmail(signInEmail.trim(), signInPassword);
+    } catch (err) {
+      console.error("[LoginPage] Email sign-in failed:", err);
+      setError(friendlyError(err instanceof Error ? (err as { code?: string }).code : undefined));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Register ──
+  const handleRegister = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!regName.trim()) {
+      setError("Please enter your name so we know what to call you.");
+      return;
+    }
+    if (!regEmail.trim()) {
+      setError("Please enter your email address.");
+      return;
+    }
+    if (regPassword.length < 6) {
+      setError("Your password needs at least 6 characters to keep your account secure.");
+      return;
+    }
+    if (regPassword !== regConfirm) {
+      setError("The passwords you entered don't match. Please try again.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await registerWithEmail(regEmail.trim(), regPassword, regName.trim());
+    } catch (err) {
+      console.error("[LoginPage] Registration failed:", err);
+      setError(friendlyError(err instanceof Error ? (err as { code?: string }).code : undefined));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Forgot Password ──
+  const handleForgotPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!resetEmail.trim()) {
+      setError("Please enter the email address linked to your account.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await sendPasswordReset(resetEmail.trim());
+      setResetSent(true);
+    } catch (err) {
+      console.error("[LoginPage] Password reset failed:", err);
+      setError(friendlyError(err instanceof Error ? (err as { code?: string }).code : undefined));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#1d3a14] px-4 py-10">
+    <div className="relative flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-auto bg-[#1d3a14] px-4 py-10">
       {/* ── Poster background: radial green glow ── */}
       <div
         className="absolute inset-0"
@@ -73,20 +210,18 @@ export default function LoginPage() {
           aria-hidden="true"
         />
       ))}
-      {/* Sparkles like on the poster */}
       <Sparkles className="absolute left-[30%] top-[14%] h-4 w-4 text-lime-200/40 animate-pulse" aria-hidden="true" />
       <Sparkles className="absolute right-[26%] top-[38%] h-3 w-3 text-lime-200/30 animate-pulse" style={{ animationDelay: "1s" }} aria-hidden="true" />
 
       {/* ── Content ── */}
       <div className="relative w-full max-w-sm">
-        {/* Mascot — drop your picture at public/farmassist-mascot.png */}
+        {/* Mascot */}
         <div className="mb-4 flex justify-center">
           <img
             src="/farmassist-mascot.png"
             alt="FarmAssist mascot"
             className="h-44 w-44 animate-float object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.45)]"
             onError={(e) => {
-              // No mascot picture yet → show a sprout icon instead
               const img = e.currentTarget;
               if (img.dataset.fallback) return;
               img.dataset.fallback = "1";
@@ -117,67 +252,276 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="rounded-3xl border border-lime-500/25 bg-[#16290f]/85 p-8 shadow-2xl shadow-black/40 backdrop-blur-md animate-scale-in">
-          {/* Google Sign-In Button */}
-          <button
-            onClick={handleSignIn}
-            disabled={signingIn}
-            className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-md transition-all hover:bg-gray-50 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {signingIn ? (
-              <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-            ) : (
-              <svg className="h-5 w-5" viewBox="0 0 24 24">
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
-              </svg>
-            )}
-            {signingIn ? "Signing in..." : "Sign in with Google"}
-          </button>
 
-          {/* Divider */}
-          <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-lime-500/20" />
-            <span className="text-xs text-lime-200/60">or</span>
-            <div className="h-px flex-1 bg-lime-500/20" />
-          </div>
+          {/* ═══════════════════════════════════════════════════
+              SIGN IN VIEW
+             ═══════════════════════════════════════════════════ */}
+          {view === "signin" && (
+            <>
+              {/* Google Sign-In */}
+              <button
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-md transition-all hover:bg-gray-50 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                ) : (
+                  <svg className="h-5 w-5" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                  </svg>
+                )}
+                {loading ? "Signing in..." : "Sign in with Google"}
+              </button>
 
-          {/* Guest Sign-In Button */}
-          <button
-            onClick={handleGuestSignIn}
-            className="flex w-full items-center justify-center gap-3 rounded-xl border border-lime-500/40 bg-lime-500/15 px-4 py-3 text-sm font-medium text-lime-300 transition-all hover:bg-lime-500/25 hover:shadow-lg hover:shadow-lime-500/10 hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <User className="h-5 w-5" />
-            Sign in as Guest
-          </button>
+              {/* Divider */}
+              <div className="my-5 flex items-center gap-3">
+                <div className="h-px flex-1 bg-lime-500/20" />
+                <span className="text-xs text-lime-200/60">or</span>
+                <div className="h-px flex-1 bg-lime-500/20" />
+              </div>
 
-          {/* Guest Mode Info */}
-          <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-950/30 p-3">
-            <div className="flex items-start gap-2">
-              <Zap className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-amber-400 font-medium">
-                  Guest Mode
-                </p>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  This account is using simulated sensor data.
+              {/* Email/Password Form */}
+              <form onSubmit={handleEmailSignIn} className="space-y-3">
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
+                  <input
+                    type="email"
+                    placeholder="Email address"
+                    value={signInEmail}
+                    onChange={(e) => setSignInEmail(e.target.value)}
+                    autoComplete="email"
+                    className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
+                  />
+                </div>
+
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={signInPassword}
+                    onChange={(e) => setSignInPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={goToForgot}
+                    className="text-xs font-medium text-lime-400/80 hover:text-lime-300 transition-colors"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-lime-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-lime-900/30 transition-all hover:bg-lime-500 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                  {loading ? "Signing in..." : "Sign In"}
+                </button>
+              </form>
+
+              {/* Link to Register */}
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={goToRegister}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-lime-500/40 bg-lime-500/15 px-4 py-3 text-sm font-semibold text-lime-300 transition-all hover:bg-lime-500/25 hover:shadow-lg hover:shadow-lime-500/10 hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Register account
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ═══════════════════════════════════════════════════
+              REGISTER VIEW
+             ═══════════════════════════════════════════════════ */}
+          {view === "register" && (
+            <>
+              <div className="mb-5 text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-500/15">
+                  <UserPlus className="h-6 w-6 text-lime-400" />
+                </div>
+                <h2 className="text-lg font-bold text-white">Create Account</h2>
+                <p className="mt-1 text-xs text-lime-200/60">
+                  Set up your FarmAssist dashboard in seconds.
                 </p>
               </div>
-            </div>
-          </div>
+
+              <form onSubmit={handleRegister} className="space-y-3">
+                <div className="relative">
+                  <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
+                  <input
+                    type="text"
+                    placeholder="Your name"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    autoComplete="name"
+                    autoFocus
+                    className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
+                  />
+                </div>
+
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
+                  <input
+                    type="email"
+                    placeholder="Email address"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    autoComplete="email"
+                    className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
+                  />
+                </div>
+
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
+                  <input
+                    type="password"
+                    placeholder="Password (at least 6 characters)"
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
+                  />
+                </div>
+
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
+                  <input
+                    type="password"
+                    placeholder="Confirm password"
+                    value={regConfirm}
+                    onChange={(e) => setRegConfirm(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-lime-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-lime-900/30 transition-all hover:bg-lime-500 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  {loading ? "Creating account..." : "Create Account"}
+                </button>
+              </form>
+
+              {/* Divider */}
+              <div className="my-5 flex items-center gap-3">
+                <div className="h-px flex-1 bg-lime-500/20" />
+                <span className="text-xs text-lime-200/60">or</span>
+                <div className="h-px flex-1 bg-lime-500/20" />
+              </div>
+
+              {/* Google Sign-Up */}
+              <button
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="flex w-full items-center justify-center gap-3 rounded-xl border border-lime-500/40 bg-lime-500/15 px-4 py-3 text-sm font-medium text-lime-300 transition-all hover:bg-lime-500/25 hover:shadow-lg hover:shadow-lime-500/10 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                </svg>
+                Sign up with Google
+              </button>
+
+              {/* Link to Sign In */}
+              <p className="mt-5 text-center text-xs text-lime-200/50">
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={goToSignIn}
+                  className="font-semibold text-lime-400 hover:text-lime-300 transition-colors"
+                >
+                  Sign in
+                </button>
+              </p>
+            </>
+          )}
+
+          {/* ═══════════════════════════════════════════════════
+              FORGOT PASSWORD VIEW
+             ═══════════════════════════════════════════════════ */}
+          {view === "forgot" && (
+            <>
+              {!resetSent ? (
+                <>
+                  <div className="mb-5 text-center">
+                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-lime-500/15">
+                      <Lock className="h-6 w-6 text-lime-400" />
+                    </div>
+                    <h2 className="text-lg font-bold text-white">Reset Password</h2>
+                    <p className="mt-1 text-xs text-lime-200/60">
+                      Enter your email and we&apos;ll send you a reset link.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleForgotPassword} className="space-y-3">
+                    <div className="relative">
+                      <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
+                      <input
+                        type="email"
+                        placeholder="Email address"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        autoComplete="email"
+                        autoFocus
+                        className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-lime-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-lime-900/30 transition-all hover:bg-lime-500 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                      {loading ? "Sending..." : "Send Reset Link"}
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <div className="text-center">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/15">
+                    <CheckCircle className="h-6 w-6 text-emerald-400" />
+                  </div>
+                  <h2 className="text-lg font-bold text-white">Check Your Email</h2>
+                  <p className="mt-2 text-sm text-lime-200/70">
+                    We sent a password reset link to{" "}
+                    <span className="font-medium text-lime-300">{resetEmail}</span>.
+                    Check your inbox and follow the instructions.
+                  </p>
+                  <p className="mt-3 text-xs text-lime-200/40">
+                    Didn&apos;t receive it? Check your spam folder, or try again in a few minutes.
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={goToSignIn}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-lime-500/25 bg-lime-500/10 px-4 py-3 text-sm font-medium text-lime-300 transition-all hover:bg-lime-500/20 hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Sign In
+              </button>
+            </>
+          )}
 
           {/* Error */}
           {error && (

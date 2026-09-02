@@ -181,6 +181,24 @@ export function roverRegistryRef(deviceId: string): DatabaseReference {
   return ref(db, `rover_registry/${deviceId}`);
 }
 
+// ── Rover Commands ──────────────────────────────────────────
+
+/**
+ * Reference to the commands node for a user's device.
+ * Path: users/{uid}/devices/{deviceId}/commands
+ *
+ * The ESP32 polls this node for pending commands.
+ * Shape of each child: {
+ *   action: string,       // e.g. "watering", "emergency_stop"
+ *   timestamp: number,    // Date.now()
+ *   status: "pending" | "executed" | "failed"
+ * }
+ */
+export function commandsRef(userId: string, deviceId?: string): DatabaseReference {
+  const id = deviceId ?? getDeviceId();
+  return ref(db, `users/${userId}/devices/${id}/commands`);
+}
+
 // ── Notifications ────────────────────────────────────────────
 
 /**
@@ -189,7 +207,7 @@ export function roverRegistryRef(deviceId: string): DatabaseReference {
  *
  * Shape of each child: {
  *   id: string,
- *   type: "sensor_alert" | "force_pair" | "rover_offline",
+ *   type: "sensor_alert" | "rover_offline",
  *   title: string,
  *   body: string,
  *   deviceId: string,

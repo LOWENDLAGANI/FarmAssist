@@ -57,12 +57,15 @@ interface BottomNavProps {
   onNavigate: (page: string) => void;
   /** Show a pulsing alert dot on the Settings icon. */
   settingsAlert?: boolean;
+  /** Number of unread notifications — shows a red badge on the Alerts tab. */
+  unreadCount?: number;
 }
 
 export default function BottomNav({
   activePage,
   onNavigate,
   settingsAlert,
+  unreadCount = 0,
 }: BottomNavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -161,7 +164,15 @@ export default function BottomNav({
                   : "text-slate-400 active:bg-slate-800/70 active:text-slate-200"
               }`}
             >
-              <Icon className={`h-5 w-5 transition-transform duration-200 ${isActive ? "scale-110" : ""}`} />
+              <span className="relative">
+                <Icon className={`h-5 w-5 transition-transform duration-200 ${isActive ? "scale-110" : ""}`} />
+                {/* Unread notification badge */}
+                {item.id === "notifications" && unreadCount > 0 && activePage !== "notifications" && (
+                  <span className="absolute -right-1.5 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-bold text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </span>
               <span className="text-[10px] font-medium">{item.label}</span>
             </button>
           );

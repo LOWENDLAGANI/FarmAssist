@@ -2,8 +2,8 @@
  * NotificationsPage.tsx
  * ─────────────────────────────────────────────────────────────────
  * Full-page view for the notification center.
- * Shows all critical alerts (sensor thresholds, force-pair,
- * rover offline) with filtering and mark-as-read controls.
+ * Shows all critical alerts (sensor thresholds, rover offline)
+ * with filtering and mark-as-read controls.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -14,7 +14,6 @@ import {
   Bell,
   BellOff,
   AlertTriangle,
-  ShieldOff,
   WifiOff,
   CheckCheck,
   Filter,
@@ -29,14 +28,12 @@ interface NotificationsPageProps {
   onMarkAllRead: () => void;
 }
 
-type FilterType = "all" | "unread" | "sensor_alert" | "force_pair" | "rover_offline";
+type FilterType = "all" | "unread" | "sensor_alert" | "rover_offline";
 
 function notificationIcon(type: AppNotification["type"]) {
   switch (type) {
     case "sensor_alert":
       return <AlertTriangle className="h-5 w-5 text-amber-400" />;
-    case "force_pair":
-      return <ShieldOff className="h-5 w-5 text-red-400" />;
     case "rover_offline":
       return <WifiOff className="h-5 w-5 text-red-400" />;
   }
@@ -46,8 +43,6 @@ function notificationLabel(type: AppNotification["type"]) {
   switch (type) {
     case "sensor_alert":
       return "Sensor Alert";
-    case "force_pair":
-      return "Force Pair";
     case "rover_offline":
       return "Rover Offline";
   }
@@ -57,7 +52,6 @@ const FILTER_OPTIONS: { value: FilterType; label: string }[] = [
   { value: "all", label: "All" },
   { value: "unread", label: "Unread" },
   { value: "sensor_alert", label: "Sensor Alerts" },
-  { value: "force_pair", label: "Force Pair" },
   { value: "rover_offline", label: "Rover Offline" },
 ];
 

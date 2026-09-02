@@ -7,7 +7,6 @@
  * Functions:
  *  • askAssistant   — callable; Gemini-powered in-app help assistant
  *  • onSensorAlert  — triggers on telemetry write, checks thresholds
- *  • onForcePair    — triggers on rover_registry update
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -128,58 +127,6 @@ export const onSensorAlert = onValueWritten(
         logger.warn(`Removed stale FCM token for ${uid}`);
       } else {
         logger.error("Push send failed:", err);
-      }
-    }
-  }
-);
-
-// ── Force-pair alert ────────────────────────────────────────────
-export const onForcePair = onValueUpdated(
-  "/rover_registry/{deviceId}",
-  async (event) => {
-    const deviceId = event.params.deviceId;
-    const before = event.data.before.val();
-    const after = event.data.after.val();
-
-    if (!before || !after) return;
-    if (before.ownerUid === after.ownerUid) return;
-    if (!before.ownerUid) return;
-
-    const prevOwnerUid = before.ownerUid;
-    if (before.paired === false && after.paired === true) return;
-
-    const tokenSnap = await db
-      .ref(`users/${prevOwnerUid}/fcmToken`)
-      .get();
-    const tokenData = tokenSnap.val();
-    if (!tokenData?.token) return;
-
-    try {
-      await messaging.send({
-        token: tokenData.token,
-        notification: {
-          title: `Rover Claimed — ${deviceId}`,
-          body: `Your Rover "${deviceId}" was claimed by another account.`,
-        },
-        data: { deviceId, type: "force_pair" },
-        webpush: {
-          fcmOptions: { link: "/settings" },
-          notification: {
-            icon: "/favicon.ico",
-            tag: `force_pair_${deviceId}`,
-            renotify: true,
-          },
-        },
-      });
-      logger.info(`Force-pair push sent to ${prevOwnerUid}`);
-    } catch (err: any) {
-      if (
-        err.code === "messaging/registration-token-not-registered" ||
-        err.code === "messaging/invalid-registration-token"
-      ) {
-        await db.ref(`users/${prevOwnerUid}/fcmToken`).remove();
-      } else {
-        logger.error("Force-pair push failed:", err);
       }
     }
   }
@@ -350,7 +297,7 @@ function getTwilioFromNumber(): string {
 
 // ── sendSms — callable; sends a test SMS ─────────────────────────
 export const sendSms = onCall(
-  { secrets: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"] },
+  {},
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in to send SMS.");
@@ -430,9 +377,10 @@ export const onRoverOffline = onValueUpdated(
       const twilio = (await import("twilio")).default;
       const client = twilio(accountSid, authToken);
       await client.messages.create({
-        body: `🚨 FarmAssist Alert: Rover "${deviceId}" has gone offline. Please check power and WiFi connection.`,
+        body: "sms_delivery_notifications",
         from: fromNumber,
         to: phoneNumber,
+        contentVariables: JSON.stringify({ "1": deviceId }),
       });
       logger.info(`Offline SMS sent to ${phoneNumber} for rover ${deviceId}`);
     } catch (err: any) {

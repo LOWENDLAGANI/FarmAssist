@@ -308,7 +308,7 @@ function getTwilioFromNumber() {
     return from;
 }
 // ── sendSms — callable; sends a test SMS ─────────────────────────
-exports.sendSms = (0, https_1.onCall)({ secrets: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"] }, async (request) => {
+exports.sendSms = (0, https_1.onCall)({}, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "Sign in to send SMS.");
     }
@@ -380,9 +380,10 @@ exports.onRoverOffline = (0, database_2.onValueUpdated)("/users/{uid}/devices/{d
         const twilio = (await Promise.resolve().then(() => __importStar(require("twilio")))).default;
         const client = twilio(accountSid, authToken);
         await client.messages.create({
-            body: `🚨 FarmAssist Alert: Rover "${deviceId}" has gone offline. Please check power and WiFi connection.`,
+            body: "sms_delivery_notifications",
             from: fromNumber,
             to: phoneNumber,
+            contentVariables: JSON.stringify({ "1": deviceId }),
         });
         logger.info(`Offline SMS sent to ${phoneNumber} for rover ${deviceId}`);
     }

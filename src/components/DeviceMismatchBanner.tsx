@@ -6,7 +6,7 @@
  *
  * Modes:
  *  • "taken"        — Rover is paired to another account in the
- *                     rover_registry. User must force-pair in Settings.
+ *                     rover_registry. User must reconfigure the Rover.
  *  • "unregistered" — Rover has never been paired through the web app.
  * ─────────────────────────────────────────────────────────────────
  */

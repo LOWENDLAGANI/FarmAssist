@@ -61,11 +61,13 @@ interface SidebarProps {
   onNavigate: (page: string) => void;
   /** Show a pulsing alert dot on the Settings item. */
   settingsAlert?: boolean;
+  /** Number of unread notifications — shows a red badge on the Notifications item. */
+  unreadCount?: number;
   /** Notifies the parent whenever the collapsed state changes (for content reflow animation). */
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export default function Sidebar({ activePage, onNavigate, settingsAlert, onCollapsedChange }: SidebarProps) {
+export default function Sidebar({ activePage, onNavigate, settingsAlert, unreadCount = 0, onCollapsedChange }: SidebarProps) {
   // Collapse state lives in the synced user settings (Firebase + localStorage fallback)
   const { sidebarCollapsed: collapsed, setSidebarCollapsed } = useAppTheme();
 
@@ -209,6 +211,16 @@ export default function Sidebar({ activePage, onNavigate, settingsAlert, onColla
                 className={`${collapsed ? "h-6 w-6" : "h-5 w-5"} shrink-0 transition-transform duration-200 group-hover:scale-110`}
               />
               {!collapsed && <span>{item.label}</span>}
+              {/* Unread notification badge */}
+              {item.id === "notifications" && unreadCount > 0 && activePage !== "notifications" && (
+                <span
+                  className={`rounded-full bg-red-500 text-[9px] font-bold text-white ${
+                    collapsed ? "absolute right-2 top-2 min-h-[18px] min-w-[18px] px-1" : "ml-auto px-1.5 py-0.5"
+                  }`}
+                >
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
               {item.id === "settings" && settingsAlert && (
                 <span
                   className={`rounded-full bg-amber-400 animate-pulse-dot ${

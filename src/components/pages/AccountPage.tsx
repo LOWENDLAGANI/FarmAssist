@@ -4,7 +4,6 @@
  * Dedicated account / user info page.
  * Shows profile photo, display name, email, account UID (copyable),
  * sign-in method, member-since date, and a sign-out button.
- * Works in guest mode too (shows a guest profile + exit button).
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -12,7 +11,7 @@
 
 import { useState } from "react";
 import { ref, remove } from "firebase/database";
-import { deleteUser, updateProfile } from "firebase/auth";
+import { deleteUser, updateProfile, linkWithPopup, GoogleAuthProvider, type UserCredential } from "firebase/auth";
 import { useAuth } from "../AuthProvider";
 import { useAppTheme } from "../ThemeProvider";
 import { useDeviceValidation } from "@/hooks/useDeviceValidation";
@@ -24,7 +23,6 @@ import {
   Copy,
   Check,
   LogOut,
-  Zap,
   ShieldCheck,
   CalendarDays,
   AlertTriangle,
@@ -33,7 +31,11 @@ import {
   Loader2,
   LifeBuoy,
   Pencil,
+  Zap,
+  Link as LinkIcon,
 } from "lucide-react";
+// Zap is imported but unused — kept to satisfy Turbopack module cache until server restart
+void Zap;
 
 /* ── Support channels ─────────────────────────────────────────── */
 /* ✏️ EDIT THESE with your real support links before production!  */
@@ -110,7 +112,7 @@ const SUPPORT_CHANNELS = [
 ];
 
 export default function AccountPage() {
-  const { user, isGuest, logOut } = useAuth();
+  const { user, logOut } = useAuth();
   const { deviceId } = useAppTheme();
   const { unlinkDevice } = useDeviceValidation(user?.uid ?? "", deviceId);
   const [uidCopied, setUidCopied] = useState(false);
@@ -123,30 +125,35 @@ export default function AccountPage() {
   const [nameInput, setNameInput] = useState(user?.displayName ?? "");
   const [savingName, setSavingName] = useState(false);
   const [nameSaved, setNameSaved] = useState(false);
+  const [linkingGoogle, setLinkingGoogle] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkSuccess, setLinkSuccess] = useState(false);
 
-  const displayName = isGuest ? "Guest User" : user?.displayName ?? "FarmAssist User";
-  const email = isGuest ? "Not available in guest mode" : user?.email ?? "No email linked";
-  const photoURL = isGuest ? null : user?.photoURL ?? null;
-  const userUID = isGuest ? "guest-mode" : user?.uid ?? "";
-  const signInMethod = isGuest
-    ? "Guest session (simulated data)"
-    : user?.providerData?.[0]?.providerId === "google.com"
-      ? "Google account"
-      : "Email / password";
-  const memberSince = isGuest
-    ? null
-    : user?.metadata?.creationTime
-      ? new Date(user.metadata.creationTime).toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })
-      : null;
+  const displayName = user?.displayName ?? "FarmAssist User";
+  const email = user?.email ?? "No email linked";
+  const photoURL = user?.photoURL ?? null;
+  const userUID = user?.uid ?? "";
+  // Determine all linked sign-in methods
+  const linkedProviders = (user?.providerData ?? []).map((p) => p.providerId);
+  const hasGoogle = linkedProviders.includes("google.com");
+  const hasEmail = linkedProviders.includes("password");
+  const signInMethod = hasGoogle
+    ? "Google account"
+    : hasEmail
+      ? "Email / password"
+      : "Unknown";
+  const memberSince = user?.metadata?.creationTime
+    ? new Date(user.metadata.creationTime).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : null;
 
   // ── Display name editing (saved to the Firebase Auth profile) ─
   const handleSaveName = async () => {
     const trimmed = nameInput.trim();
-    if (!user || isGuest || trimmed.length === 0 || trimmed === user.displayName) {
+    if (!user || trimmed.length === 0 || trimmed === user.displayName) {
       setEditingName(false);
       return;
     }
@@ -183,18 +190,42 @@ export default function AccountPage() {
     }
   };
 
+  // ── Link Google account ──────────────────────────────────────
+  const handleLinkGoogle = async () => {
+    if (!user) return;
+    setLinkingGoogle(true);
+    setLinkError(null);
+    setLinkSuccess(false);
+    try {
+      await linkWithPopup(user, new GoogleAuthProvider());
+      setLinkSuccess(true);
+      await user.reload();
+      setTimeout(() => setLinkSuccess(false), 3000);
+    } catch (err) {
+      console.error("[AccountPage] Google link failed:", err);
+      const code = err instanceof Error ? (err as { code?: string }).code : undefined;
+      if (code === "auth/provider-already-linked") {
+        setLinkError("Your account is already linked with Google.");
+      } else if (code === "auth/credential-already-in-use") {
+        setLinkError("This Google account is already linked to a different user. Please sign in with that account instead.");
+      } else if (code === "auth/popup-closed-by-user") {
+        setLinkError("Linking cancelled. Please try again when you're ready.");
+      } else if (code === "auth/popup-blocked") {
+        setLinkError("The popup was blocked by your browser. Please allow popups for this site.");
+      } else {
+        setLinkError("Failed to link Google account. Please try again.");
+      }
+    } finally {
+      setLinkingGoogle(false);
+    }
+  };
+
   // ── Account deletion ────────────────────────────────────────
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== "DELETE" || !user) return;
     setDeleting(true);
     setDeleteError(null);
     try {
-      if (isGuest) {
-        // Guests have no server data — just exit the session
-        await logOut();
-        return;
-      }
-
       // 1. Release the paired Rover so others can claim it
       await unlinkDevice(user.uid, deviceId);
 
@@ -249,7 +280,7 @@ export default function AccountPage() {
 
           <div className="min-w-0 flex-1 text-center sm:text-left">
             <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center">
-              {editingName && !isGuest ? (
+              {editingName ? (
                 <div className="flex w-full items-center gap-2">
                   <input
                     type="text"
@@ -281,31 +312,23 @@ export default function AccountPage() {
               ) : (
                 <>
                   <h3 className="truncate text-lg font-bold text-white">{displayName}</h3>
-                  {!isGuest && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNameInput(user?.displayName ?? "");
-                        setEditingName(true);
-                      }}
-                      title="Edit display name"
-                      className="rounded-lg p-1.5 text-slate-500 transition-all hover:bg-cyan-500/10 hover:text-cyan-400"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNameInput(user?.displayName ?? "");
+                      setEditingName(true);
+                    }}
+                    title="Edit display name"
+                    className="rounded-lg p-1.5 text-slate-500 transition-all hover:bg-cyan-500/10 hover:text-cyan-400"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
                 </>
               )}
               {nameSaved && (
                 <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
                   <Check className="h-3 w-3" />
                   Saved
-                </span>
-              )}
-              {isGuest && (
-                <span className="flex w-fit items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400">
-                  <Zap className="h-3 w-3" />
-                  Guest
                 </span>
               )}
             </div>
@@ -326,33 +349,50 @@ export default function AccountPage() {
                   <dt className="text-[10px] uppercase tracking-wide text-slate-500">Account UID</dt>
                   <dd className="truncate font-mono text-xs text-cyan-300">{userUID}</dd>
                 </div>
-                {!isGuest && (
-                  <button
-                    type="button"
-                    onClick={copyUid}
-                    className="flex shrink-0 items-center gap-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-medium text-cyan-400 transition-all hover:bg-cyan-500/20 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    {uidCopied ? (
-                      <>
-                        <Check className="h-3.5 w-3.5" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-3.5 w-3.5" />
-                        Copy
-                      </>
-                    )}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={copyUid}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-medium text-cyan-400 transition-all hover:bg-cyan-500/20 hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  {uidCopied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy
+                    </>
+                  )}
+                </button>
               </div>
 
-              <div className="flex items-center gap-3 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-3 py-2.5">
-                <ShieldCheck className="h-4 w-4 shrink-0 text-cyan-400" />
-                <div className="min-w-0">
-                  <dt className="text-[10px] uppercase tracking-wide text-slate-500">Sign-in method</dt>
-                  <dd className="truncate text-sm text-slate-200">{signInMethod}</dd>
+              <div className="rounded-xl border border-cyan-900/20 bg-[#0a1628] px-3 py-2.5">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="h-4 w-4 shrink-0 text-cyan-400" />
+                  <div className="min-w-0 flex-1">
+                    <dt className="text-[10px] uppercase tracking-wide text-slate-500">Sign-in method</dt>
+                    <dd className="truncate text-sm text-slate-200">{signInMethod}</dd>
+                  </div>
                 </div>
+                {/* Show all linked providers */}
+                {linkedProviders.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5 pl-7">
+                    {hasGoogle && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-400">
+                        <svg className="h-3 w-3" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                        Google
+                      </span>
+                    )}
+                    {hasEmail && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-lime-500/20 bg-lime-500/10 px-2 py-0.5 text-[10px] font-medium text-lime-400">
+                        <Mail className="h-3 w-3" />
+                        Email &amp; Password
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {memberSince && (
@@ -368,29 +408,81 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* Guest notice */}
-        {isGuest && (
-          <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-950/20 p-3">
-            <div className="flex items-start gap-2">
-              <Zap className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-              <p className="text-xs text-amber-400">
-                You are in guest mode with simulated sensor data. Sign in with Google to
-                connect a real Rover and sync your settings.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Sign out */}
         <button
           type="button"
           onClick={handleLogout}
           disabled={loggingOut}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm font-semibold text-red-400 transition-all hover:bg-red-950/50 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm font-semibold text-red-400 transition-all hover:bg-red-950/50 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <LogOut className="h-4 w-4" />
-          {loggingOut ? "Signing out..." : isGuest ? "Exit Guest Mode" : "Sign Out"}
+          {loggingOut ? "Signing out..." : "Sign Out"}
         </button>
+      </div>
+
+      {/* ── Bind / link another sign-in method ── */}
+      <div className="mt-6 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/15">
+            <LinkIcon className="h-4 w-4 text-cyan-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-white">Bind / Link Account</h3>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Connect another sign-in method to this FarmAssist account.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {!hasGoogle && (
+            <button
+              type="button"
+              onClick={handleLinkGoogle}
+              disabled={linkingGoogle}
+              aria-label="Bind or link a Google account"
+              className="flex w-full items-center gap-3 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-3 transition-all hover:border-blue-500/40 hover:bg-[#0f2240] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {linkingGoogle ? (
+                <Loader2 className="h-5 w-5 shrink-0 animate-spin text-slate-400" />
+              ) : (
+                <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+              )}
+              <div className="min-w-0 text-left">
+                <span className="text-sm font-medium text-slate-200">Bind / Link Google Account</span>
+                <span className="block text-[11px] text-slate-500">Sign in with your Google account as a backup</span>
+              </div>
+            </button>
+          )}
+          {hasGoogle && (
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+              <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+              <span className="text-sm font-medium text-emerald-400">Google account linked</span>
+            </div>
+          )}
+
+          {!hasEmail && (
+            <p className="text-xs text-slate-500 px-1">
+              Email &amp; Password is your primary sign-in method for this account.
+            </p>
+          )}
+        </div>
+
+        {/* Link success message */}
+        {linkSuccess && (
+          <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+            <p className="text-center text-sm text-emerald-400">
+              Google account linked successfully!
+            </p>
+          </div>
+        )}
+
+        {/* Link error message */}
+        {linkError && (
+          <div className="mt-3 rounded-xl border border-red-800/40 bg-red-950/30 p-3">
+            <p className="text-center text-sm text-red-400">{linkError}</p>
+          </div>
+        )}
       </div>
 
       {/* ── Contact Support ── */}

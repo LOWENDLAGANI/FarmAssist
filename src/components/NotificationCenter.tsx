@@ -2,8 +2,7 @@
  * NotificationCenter.tsx
  * ─────────────────────────────────────────────────────────────────
  * Bell icon with unread badge + dropdown panel listing notifications.
- * Only critical alerts appear here (sensor thresholds, force-pair,
- * rover offline).
+ * Only critical alerts appear here (sensor thresholds, rover offline).
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -14,7 +13,6 @@ import {
   Bell,
   BellOff,
   AlertTriangle,
-  ShieldOff,
   WifiOff,
   CheckCheck,
   X,
@@ -33,8 +31,6 @@ function notificationIcon(type: AppNotification["type"]) {
   switch (type) {
     case "sensor_alert":
       return <AlertTriangle className="h-4 w-4 text-amber-400" />;
-    case "force_pair":
-      return <ShieldOff className="h-4 w-4 text-red-400" />;
     case "rover_offline":
       return <WifiOff className="h-4 w-4 text-red-400" />;
   }

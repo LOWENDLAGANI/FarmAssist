@@ -15,8 +15,7 @@
  *  4. If record absent or `paired === false` → "unregistered"
  *  5. Pairing writes `{ ownerUid, paired: true, pairedAt }` —
  *     only succeeds if the Rover is unregistered or already mine.
- *  6. Force-pairing overwrites the record to claim a taken Rover.
- *  7. Unlinking sets `paired: false` but keeps the record so the
+ *  6. Unlinking sets `paired: false` but keeps the record so the
  *     original owner can re-pair without conflict.
  * ─────────────────────────────────────────────────────────────────
  */
@@ -59,8 +58,6 @@ export interface DeviceValidationResult {
   isLoading: boolean;
   /** Pair this Rover to the given user. Fails if already taken by another. */
   registerDevice: (userId: string, deviceId: string) => Promise<boolean>;
-  /** Force-pair a Rover already owned by another user. */
-  forceRegisterDevice: (userId: string, deviceId: string) => Promise<void>;
   /** Unlink the Rover so it can be paired by any account. */
   unlinkDevice: (userId: string, deviceId: string) => Promise<void>;
 }
@@ -97,7 +94,6 @@ export function useDeviceValidation(
       },
       isLoading: false,
       registerDevice: async () => true,
-      forceRegisterDevice: async () => {},
       unlinkDevice: async () => {},
     };
   }
@@ -190,22 +186,6 @@ export function useDeviceValidation(
     []
   );
 
-  // ── Force-pair (overwrite another user's ownership) ─────────
-  const forceRegisterDevice = useCallback(
-    async (uid: string, did: string) => {
-      if (!uid || !did) return;
-      try {
-        await set(roverRegistryRef(did), {
-          ownerUid: uid,
-          paired: true,
-          pairedAt: Date.now(),
-        });
-      } catch (err) {
-        console.error("[useDeviceValidation] Failed to force-register device:", err);
-      }
-    },
-    []
-  );
 
   // ── Unlink (set paired=false, keep record) ──────────────────
   const unlinkDevice = useCallback(
@@ -229,7 +209,6 @@ export function useDeviceValidation(
     registryInfo,
     isLoading,
     registerDevice,
-    forceRegisterDevice,
     unlinkDevice,
   };
 }

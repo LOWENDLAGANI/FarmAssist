@@ -76,9 +76,10 @@ export function useSms(userId: string) {
         "sendSms"
       );
 
+      // For Twilio trial accounts, pass the pre-built template name as body
       const result = await sendSmsFn({
         to: phoneNumber,
-        body: "✅ FarmAssist SMS test successful! You will receive alerts when your Rover goes offline.",
+        body: "sms_appointment_reminders",
       });
 
       setSendResult({

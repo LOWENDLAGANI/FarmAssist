@@ -35,6 +35,7 @@ import {
   HardDrive,
   Archive,
   MessageSquare,
+  CircleUserRound,
 } from "lucide-react";
 import { isSoundEnabled, setSoundEnabled, isHapticEnabled, setHapticEnabled } from "@/lib/notificationSound";
 import { getNotificationPrefs, setNotificationPref, isNotificationEnabled, type AlertSeverity } from "@/lib/notificationPreferences";
@@ -73,6 +74,8 @@ interface SettingsPageProps {
   /** Whether the dashboard background is blurred. */
   backgroundBlur: boolean;
   onBackgroundBlurChange: (blurred: boolean) => void;
+  /** Opens the account page, where sign-in methods can be linked. */
+  onOpenAccountSettings: () => void;
 }
 
 const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light"];
@@ -275,6 +278,7 @@ export default function SettingsPage({
   onBackgroundReset,
   backgroundBlur,
   onBackgroundBlurChange,
+  onOpenAccountSettings,
 }: SettingsPageProps) {
   const { theme, setTheme, themes, customTheme, setCustomTheme, applyCustomTheme } = useAppTheme();
   const { registerDevice, unlinkDevice, status: deviceLinkStatus, registryInfo } = useDeviceValidation(userUID, deviceId);
@@ -467,6 +471,29 @@ export default function SettingsPage({
             linkStatus={deviceLinkStatus}
             registryInfo={registryInfo}
           />
+        </div>
+
+        {/* Account sign-in settings */}
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-2">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/15">
+              <CircleUserRound className="h-4 w-4 text-cyan-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold text-white">Account Settings</h3>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Bind or link a Google account as another way to sign in.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenAccountSettings}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-medium text-cyan-400 transition-all hover:bg-cyan-500/30 hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Link className="h-4 w-4" />
+            Bind / Link Account
+          </button>
         </div>
 
         {/* User UID (for ESP32 pairing) */}

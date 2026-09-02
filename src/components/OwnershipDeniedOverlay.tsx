@@ -5,7 +5,7 @@
  * registered to a different account in rover_registry.
  *
  * Blocks access to stale/empty data and directs the user to
- * Settings to force-pair or reconfigure the Rover.
+ * Settings to reconfigure the Rover.
  * ─────────────────────────────────────────────────────────────────
  */
 

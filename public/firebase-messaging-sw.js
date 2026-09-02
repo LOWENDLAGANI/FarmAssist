@@ -17,8 +17,8 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // ── Cache names ──────────────────────────────────────────────
-const STATIC_CACHE = "farmassist-static-v1";
-const RUNTIME_CACHE = "farmassist-runtime-v1";
+const STATIC_CACHE = "farmassist-static-v3";
+const RUNTIME_CACHE = "farmassist-runtime-v3";
 
 // Static assets to pre-cache on install (Next.js output)
 const PRECACHE_URLS = [
@@ -36,6 +36,13 @@ self.addEventListener("install", (event) => {
     caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS))
   );
   self.skipWaiting();
+});
+
+// ── Handle SKIP_WAITING message from the app ────────────────
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 // ── Activate: clean up old caches ────────────────────────────
