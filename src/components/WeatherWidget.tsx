@@ -393,7 +393,7 @@ export default function WeatherWidget() {
               onKeyDown={(e) => e.key === "Enter" && handleSaveLocation()}
               placeholder="City or lat, lon"
               autoFocus
-              className="min-w-0 flex-1 rounded-lg border border-cyan-900/30 bg-[#0c1a2e] px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none"
+              className="min-w-0 flex-1 rounded-xl border border-cyan-900/30 bg-[#0c1a2e] px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none"
             />
             <button
               type="button"
@@ -458,7 +458,7 @@ export default function WeatherWidget() {
             type="button"
             onClick={handleClearLocation}
             title="Switch back to automatic location"
-            className="shrink-0 rounded-md border border-cyan-900/20 bg-[#0c1a2e]/80 px-2 py-1 text-[9px] font-medium text-cyan-400 transition-all hover:bg-cyan-500/15 hover:text-cyan-300 active:scale-95"
+            className="shrink-0 rounded-lg border border-cyan-900/20 bg-[#0c1a2e]/80 px-2 py-1 text-[9px] font-medium text-cyan-400 transition-all hover:bg-cyan-500/15 hover:text-cyan-300 active:scale-95"
           >
             Use automatic
           </button>

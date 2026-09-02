@@ -357,8 +357,8 @@ export default function SettingsPage({
           </div>
           <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-950/20 p-3">
             <p className="text-xs text-amber-400">
-              ⚠️ Don't forget to activate your account with the Rover.
-              Change the <code className="font-mono">USER_UID</code> define to:
+              Don't forget to activate your account with the Rover.
+              
             </p>
             <code className="mt-1 block rounded bg-[#0a1628] px-2 py-1 text-xs text-cyan-400 font-mono">
               #Here is your account UID: &quot;{userUID}&quot;
@@ -553,7 +553,7 @@ export default function SettingsPage({
                   </div>
                   <button
                     onClick={() => setShowUnlinkConfirm(false)}
-                    className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
+                    className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -757,7 +757,7 @@ export default function SettingsPage({
                   <h3 className="text-lg font-semibold text-white">Custom Theme</h3>
                   <button
                     onClick={() => setShowCustomBuilder(false)}
-                    className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
+                    className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
                   >
                     <X className="h-4 w-4" />
                   </button>

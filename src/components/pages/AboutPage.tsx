@@ -14,19 +14,16 @@ const APP_VERSION = "1.0.0";
 const BUILD_DATE = "August 2026";
 
 const OSS_LICENSES = [
-  { name: "Next.js", license: "MIT", url: "https://nextjs.org" },
-  { name: "React", license: "MIT", url: "https://react.dev" },
-  { name: "Tailwind CSS", license: "MIT", url: "https://tailwindcss.com" },
-  { name: "Recharts", license: "MIT", url: "https://recharts.org" },
-  { name: "Lucide React", license: "ISC", url: "https://lucide.dev" },
-  { name: "Firebase JS SDK", license: "Apache-2.0", url: "https://firebase.google.com" },
-  { name: "Google Fonts (Geist)", license: "OFL-1.1", url: "https://fonts.google.com" },
+  { name: "Muhammad Husaini Bin Mohd Hishamuddin", license: "Minetallest", url: "https://farm-ad.vercel.app" },
+  { name: "Muhammad Naqeeb Bin Norazam", license: "Qeb", url: "https://farm-ad.vercel.app" },
+  { name: "Izzhazim Idzme Bin Mohd Fadzley Idzme", license: "Izeay", url: "https://farm-ad.vercel.app" },
+  { name: "Aniq Ishraq Bin Mohd Ismail Salleh", license: "Niq", url: "https://farm-ad.vercel.app" },
 ];
 
 const CREDITS = [
-  { role: "IoT Firmware & Hardware", name: "ESP32 Rover Team" },
-  { role: "AI Assistant", name: "Hikari 🌱 (Gemini-powered)" },
-  { role: "Design Inspiration", name: "Agrovator @ Sekolah" },
+  { role: "Developer & Maintainer", name: "Minetallest" },
+  { role: "AI Assistant", name: "Hikari" },
+  { role: "Competition", name: "Agrovator @ Sekolah" },
 ];
 
 export default function AboutPage() {
@@ -69,7 +66,7 @@ export default function AboutPage() {
       <div className="mb-8 text-center">
         <h1 className="text-2xl font-bold text-white">FarmAssist</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Real-time IoT farming dashboard
+          [██████████]
         </p>
       </div>
 
@@ -86,12 +83,12 @@ export default function AboutPage() {
             <span>{BUILD_DATE}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-400">Runtime</span>
-            <span>Next.js + Firebase</span>
+            <span className="text-slate-400">Status</span>
+            <span>Almost ready for production use</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-400">AI Model</span>
-            <span>Gemini Flash Lite</span>
+            <span className="text-slate-400">Model used by Hikari</span>
+            <span>Gemini 3.5 Flash Lite</span>
           </div>
         </div>
       </section>
@@ -112,7 +109,7 @@ export default function AboutPage() {
       {/* ── Open Source Licenses ── */}
       <section className="mb-6 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
         <h2 className="mb-3 text-sm font-semibold text-white">
-          Open Source Dependencies
+          Our Team
         </h2>
         <div className="space-y-2">
           {OSS_LICENSES.map((lib) => (
@@ -137,27 +134,6 @@ export default function AboutPage() {
               </a>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* ── Links ── */}
-      <section className="mb-6 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5">
-        <h2 className="mb-3 text-sm font-semibold text-white">Legal</h2>
-        <div className="space-y-2">
-          <a
-            href="#"
-            className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
-          >
-            Privacy Policy
-            <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
-          </a>
-          <a
-            href="#"
-            className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
-          >
-            Terms of Service
-            <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
-          </a>
         </div>
       </section>
 

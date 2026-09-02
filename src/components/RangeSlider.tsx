@@ -175,7 +175,7 @@ export function RangeNumberInput({ label, value, step, onCommit }: RangeNumberIn
       onKeyDown={(event) => {
         if (event.key === "Enter") event.currentTarget.blur();
       }}
-      className="w-full rounded-lg border border-cyan-900/20 bg-[#0c1a2e] px-3 py-2 text-xs text-white outline-none transition-all focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20"
+      className="w-full rounded-xl border border-cyan-900/20 bg-[#0c1a2e] px-3 py-2 text-xs text-white outline-none transition-all focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20"
     />
   );
 }

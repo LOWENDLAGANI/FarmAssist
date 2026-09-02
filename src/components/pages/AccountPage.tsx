@@ -393,7 +393,7 @@ export default function AccountPage() {
                       setEditingName(true);
                     }}
                     title="Edit display name"
-                    className="rounded-lg p-1.5 text-slate-500 transition-all hover:bg-cyan-500/10 hover:text-cyan-400"
+                    className="rounded-xl p-1.5 text-slate-500 transition-all hover:bg-cyan-500/10 hover:text-cyan-400"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -426,7 +426,7 @@ export default function AccountPage() {
                 <button
                   type="button"
                   onClick={copyUid}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-medium text-cyan-400 transition-all hover:bg-cyan-500/20 hover:scale-[1.02] active:scale-[0.98]"
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-medium text-cyan-400 transition-all hover:bg-cyan-500/20 hover:scale-[1.02] active:scale-[0.98]"
                 >
                   {uidCopied ? (
                     <>
@@ -540,7 +540,7 @@ export default function AccountPage() {
                   type="button"
                   onClick={() => setUnlinkConfirmProvider("google.com")}
                   disabled={!!unlinkingProvider}
-                  className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-all hover:bg-red-500/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-all hover:bg-red-500/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                 >
                   {unlinkingProvider === "google.com" ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -565,7 +565,7 @@ export default function AccountPage() {
                   type="button"
                   onClick={() => setUnlinkConfirmProvider("password")}
                   disabled={!!unlinkingProvider}
-                  className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-all hover:bg-red-500/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-all hover:bg-red-500/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                 >
                   {unlinkingProvider === "password" ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
                   Unlink

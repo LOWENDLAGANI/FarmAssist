@@ -477,7 +477,7 @@ export default function HistoryPage({
                           setEditingId(session.id);
                           setEditingName(session.name);
                         }}
-                        className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
+                        className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
                         title="Rename"
                       >
                         <Pencil className="h-4 w-4" />
@@ -490,7 +490,7 @@ export default function HistoryPage({
                         setEditingNotesId(session.id);
                         setEditingNotes(session.notes);
                       }}
-                      className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
+                      className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
                       title="Add notes"
                     >
                       <FileText className="h-4 w-4" />
@@ -500,7 +500,7 @@ export default function HistoryPage({
                     {!isActive && session.dataCount > 0 && (
                       <button
                         onClick={() => onExportCSV(session.id, session.name)}
-                        className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
+                        className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
                         title="Export CSV"
                       >
                         <Download className="h-4 w-4" />
@@ -529,7 +529,7 @@ export default function HistoryPage({
                     ) : (
                       <button
                         onClick={() => setDeletingId(session.id)}
-                        className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-950/50 hover:text-red-400"
+                        className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-red-950/50 hover:text-red-400"
                         title="Delete session"
                       >
                         <Trash2 className="h-4 w-4" />

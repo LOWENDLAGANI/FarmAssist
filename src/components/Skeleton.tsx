@@ -17,7 +17,7 @@ interface SkeletonProps {
 function Shimmer({ className = "" }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse rounded-lg bg-slate-700/40 ${className}`}
+      className={`animate-pulse rounded-xl bg-slate-700/40 ${className}`}
       aria-hidden="true"
     />
   );

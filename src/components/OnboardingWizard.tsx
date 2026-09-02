@@ -48,34 +48,34 @@ interface Step {
 const STEPS: Step[] = [
   {
     icon: <Leaf className="h-8 w-8" />,
-    title: "Welcome to FarmAssist! 🌱",
+    title: "Welcome to FarmAssist!",
     description:
-      "FarmAssist connects to your ESP32 Rover sensor unit and shows live readings for temperature, soil moisture, water level, and light — all in real time.",
-    tip: "You're viewing the dashboard right now. Swipe through to set things up!",
+      "FarmAssist is used to monitor and manage your farm in real time.",
+    tip: "You're looking at the dashboard!!",
     color: "from-emerald-500/20 to-green-500/20",
   },
   {
     icon: <Cpu className="h-8 w-8" />,
     title: "Pair Your Rover",
     description:
-      "Find the device ID printed on your Rover (e.g. esp32-farm-001), then go to Settings → Device Pairing and enter it.",
-    tip: "The device ID is case-sensitive. Once paired, your Rover's data will appear here!",
+      "To pair with your Rover, go to Settings → Device Pairing and enter the model of the rover.",
+    tip: "Look carefully at the model number on your Rover. Goodluck finding it!👍😉",
     color: "from-cyan-500/20 to-blue-500/20",
   },
   {
     icon: <Sliders className="h-8 w-8" />,
     title: "Set Sensor Ranges",
     description:
-      "Configure the optimal min/max for each sensor. When readings go outside these ranges, you'll get alerts.",
-    tip: "Default ranges work for most crops. You can always fine-tune them in Settings → Sensor Ranges.",
+      "Choose and configure the correct sensor range for your plant.",
+    tip: "The current sensor ranges works for most plant and btw don't forget to double check the value according to your plant.",
     color: "from-violet-500/20 to-purple-500/20",
   },
   {
     icon: <Bell className="h-8 w-8" />,
     title: "Enable Notifications",
     description:
-      "Allow browser notifications so you get alerts even when the tab is in the background. Critical events like empty water tanks will ping you immediately.",
-    tip: "You can also customize which alert types you receive in Settings → Notifications.",
+      "Allow notifications so you get alert. If you already rejected it, you can always enable it back in your browser settings",
+    tip: "Feel free change the notification you receive in Settings → Notifications.",
     color: "from-amber-500/20 to-orange-500/20",
   },
 ];

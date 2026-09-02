@@ -433,7 +433,7 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
         action: action.id,
         timestamp: Date.now(),
         status: "pending",
-        parameters: Object.keys(pendingParams).length > 0 ? pendingParams : undefined,
+        parameters: Object.keys(pendingParams).length > 0 ? Object.fromEntries(Object.entries(pendingParams).filter(([, v]) => v !== undefined && v !== "")) : undefined,
       });
 
       setResultStatus("success");
@@ -549,13 +549,13 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
                     action: action.id,
                     timestamp: Date.now(),
                     status: "pending",
-                    parameters: Object.keys(defaults).length > 0 ? defaults : undefined,
+                    parameters: Object.keys(defaults).length > 0 ? Object.fromEntries(Object.entries(defaults).filter(([, v]) => v !== undefined && v !== "")) : undefined,
                   });
                   // Small delay between commands so timestamps are distinct
                   await new Promise((r) => setTimeout(r, 100));
                 }
               }}
-              className="rounded-xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-2 text-xs font-medium text-slate-300 transition-all hover:border-cyan-500/30 hover:text-cyan-400 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-2 text-xs font-medium text-slate-300 transition-all hover:border-cyan-500/30 hover:text-cyan-400 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {preset.label}
             </button>
@@ -569,7 +569,7 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
           <h3 className="mb-3 text-sm font-bold text-slate-300">Recent Commands</h3>
           <div className="space-y-2">
             {commandLog.map((entry) => (
-              <div key={entry.id} className="flex items-center gap-3 rounded-xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-3">
+              <div key={entry.id} className="flex items-center gap-3 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-3">
                 <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                   entry.status === "executed" ? "bg-emerald-500/15" : entry.status === "failed" ? "bg-red-500/15" : "bg-amber-500/15"
                 }`}>

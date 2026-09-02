@@ -80,7 +80,7 @@ export default function Sidebar({ activePage, onNavigate, settingsAlert, unreadC
   return (
     <aside
       className={`relative hidden h-full shrink-0 flex-col overflow-y-auto border-r border-emerald-900/30 bg-[#0f2417] transition-[width] duration-200 ease-in-out md:flex ${
-        collapsed ? "w-16" : "w-64"
+        collapsed ? "w-16 rounded-r-2xl" : "w-64 rounded-r-2xl"
       }`}
     >
       {/* ── Custom background picture ── */}

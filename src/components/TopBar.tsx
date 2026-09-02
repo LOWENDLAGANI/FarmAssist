@@ -30,14 +30,14 @@ export default function TopBar({
   const isStale = status === "stale";
 
   return (
-    <header className="flex h-12 items-center justify-between border-b border-cyan-900/30 bg-[#0a1628] px-4 sm:h-14 sm:px-6">
+    <header className="flex h-12 items-center justify-between border-b border-cyan-900/30 bg-[#0a1628] px-4 sm:h-14 sm:px-6 rounded-t-2xl">
       {/* ── Left: Title + Device ── */}
       <div className="flex items-center gap-3">
         <h1 className="text-base font-semibold text-white sm:text-lg">
           FarmAssist
         </h1>
         {deviceId && (
-          <span className="hidden rounded-md bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-400 sm:inline">
+          <span className="hidden rounded-lg bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-400 sm:inline">
             {deviceId}
           </span>
         )}
