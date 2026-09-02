@@ -29,7 +29,7 @@ export default function SensorsPage({ latest, sensorRanges }: SensorsPageProps) 
         <p className="text-sm text-slate-400">Live readings from all connected sensors</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {SENSORS.map((key) => {
           const meta = SENSOR_META[key];
           const value = latest ? latest[key] : null;

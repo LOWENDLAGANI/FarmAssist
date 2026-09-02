@@ -33,6 +33,7 @@ import { alertUser } from "@/lib/notificationSound";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import BottomNav from "./BottomNav";
+import ErrorBoundary from "./ErrorBoundary";
 import SensorCard from "./SensorCard";
 import ChartSection from "./ChartSection";
 import FullScreenChart from "./FullScreenChart";
@@ -62,7 +63,7 @@ import {
 } from "./Skeleton";
 
 /** Ordered list of sensor keys displayed in the card grid. */
-const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light"];
+const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "light", "battery"];
 
 /** Stagger delay classes for sensor cards */
 const STAGGER_CLASSES = ["stagger-1", "stagger-2", "stagger-3", "stagger-4"];
@@ -250,12 +251,14 @@ export default function Dashboard() {
         moisture: null,
         waterLevel: null,
         light: null,
+        battery: null,
       } as Record<SensorKey, number | null>;
     return {
       temperature: latest.temperature,
       moisture: latest.moisture,
       waterLevel: latest.waterLevel,
       light: latest.light,
+      battery: latest.battery ?? null,
     };
   }, [latest]);
 
@@ -335,6 +338,7 @@ export default function Dashboard() {
           status={status}
           lastUpdated={lastUpdated}
           deviceId={deviceId}
+          batteryLevel={sensorValues.battery}
         />
 
         {/* ── Scrollable content ── */}
@@ -342,6 +346,7 @@ export default function Dashboard() {
           onAnimationEnd={() => setContentReflowing(false)}
           className={`relative flex-1 overflow-y-auto p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-6 ${contentReflowing ? "animate-content-reflow" : ""}`}
         >
+        <ErrorBoundary>
           {/* PWA Install Prompt */}
           <PwaInstallBanner />
 
@@ -359,7 +364,7 @@ export default function Dashboard() {
           {isLoading && activePage === "dashboard" && (
             <div className="animate-fade-in">
               <SkeletonBanner />
-              <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 lg:grid-cols-4">
+              <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
                 {[1, 2, 3, 4].map((i) => (
                   <SkeletonGauge key={i} />
                 ))}
@@ -418,7 +423,7 @@ export default function Dashboard() {
                 <WeatherWidget />
               </div>
 
-              <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 lg:grid-cols-4">
+              <div className="mb-6 grid grid-cols-2 gap-3 sm:mb-8 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
                 {SENSOR_KEYS.map((key, index) => (
                   <div key={key} className={`animate-slide-up ${STAGGER_CLASSES[index]}`}>
                     <SensorCard
@@ -528,6 +533,7 @@ export default function Dashboard() {
               <AboutPage />
             </div>
           )}
+        </ErrorBoundary>
         </main>
 
       {/* ── Full-Screen Chart Modal ── */}

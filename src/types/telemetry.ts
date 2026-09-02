@@ -20,6 +20,8 @@ export interface SensorTelemetry {
   waterLevel: number;
   /** Light intensity in lux */
   light: number;
+  /** Rover battery level in % */
+  battery: number;
   /** Unix epoch (ms) — generated client-side since RTDB has no timestamp */
   timestamp: number;
 }
@@ -60,7 +62,7 @@ export interface GraphSnapshot {
 }
 
 /** Union of all sensor metric keys — used for type-safe lookups. */
-export type SensorKey = "temperature" | "moisture" | "waterLevel" | "light";
+export type SensorKey = "temperature" | "moisture" | "waterLevel" | "light" | "battery";
 
 /** Display metadata for each sensor metric. */
 export interface SensorMeta {
@@ -115,6 +117,16 @@ export const SENSOR_META: Record<SensorKey, SensorMeta> = {
     min: 0,
     max: 10000,
     optimalRange: [1000, 8000],
+  },
+  battery: {
+    label: "Battery",
+    unit: "%",
+    icon: "Battery",
+    color: "text-lime-500",
+    hexColor: "#84cc16",
+    min: 0,
+    max: 100,
+    optimalRange: [20, 100],
   },
 };
 

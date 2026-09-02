@@ -40,6 +40,7 @@ export interface SessionDataPoint {
   moisture: number;
   waterLevel: number;
   light: number;
+  battery?: number;
 }
 
 /** Default session name based on current time. */

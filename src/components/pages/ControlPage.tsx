@@ -14,8 +14,8 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
-import { push, set, serverTimestamp } from "firebase/database";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { push, set, onValue, off } from "firebase/database";
 import { commandsRef } from "@/lib/firebaseConfig";
 import {
   Droplets,
@@ -30,6 +30,9 @@ import {
   Camera,
   Loader2,
   AlertCircle,
+  Clock,
+  Zap,
+  Battery,
   type LucideIcon,
 } from "lucide-react";
 
@@ -47,6 +50,27 @@ interface ControlAction {
   confirmMessage: string;
   /** Whether this action is "destructive" (e.g. emergency stop) */
   destructive?: boolean;
+  /** Optional parameters the user can set before sending */
+  params?: {
+    key: string;
+    label: string;
+    type: "number" | "select";
+    unit?: string;
+    min?: number;
+    max?: number;
+    step?: number;
+    defaultValue: number | string;
+    options?: { value: string; label: string }[];
+  }[];
+}
+
+interface CommandLogEntry {
+  id: string;
+  action: string;
+  label: string;
+  timestamp: number;
+  status: "pending" | "executed" | "failed";
+  parameters?: Record<string, number | string>;
 }
 
 const CONTROL_ACTIONS: ControlAction[] = [
@@ -60,7 +84,11 @@ const CONTROL_ACTIONS: ControlAction[] = [
     borderColor: "border-blue-500/30",
     confirmTitle: "Start Watering?",
     confirmMessage:
-      "This will activate the water pump for manual irrigation. The pump will run until you stop it manually.",
+      "This will activate the water pump for manual irrigation.",
+    params: [
+      { key: "duration", label: "Duration", type: "number", unit: "seconds", min: 1, max: 3600, step: 1, defaultValue: 30 },
+      { key: "intensity", label: "Flow Rate", type: "select", defaultValue: "medium", options: [{ value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }] },
+    ],
   },
   {
     id: "fertilizer",
@@ -73,6 +101,9 @@ const CONTROL_ACTIONS: ControlAction[] = [
     confirmTitle: "Apply Fertilizer?",
     confirmMessage:
       "This will activate the fertilizer dispenser. Make sure there is enough.",
+    params: [
+      { key: "duration", label: "Duration", type: "number", unit: "seconds", min: 1, max: 300, step: 1, defaultValue: 10 },
+    ],
   },
   {
     id: "lighting",
@@ -121,8 +152,24 @@ const CONTROL_ACTIONS: ControlAction[] = [
     confirmTitle: "Spray Pesticide?",
     confirmMessage:
       "This will activate the pesticide sprayer nozzle.",
+    params: [
+      { key: "duration", label: "Duration", type: "number", unit: "seconds", min: 1, max: 120, step: 1, defaultValue: 5 },
+      { key: "amount", label: "Amount", type: "select", defaultValue: "normal", options: [{ value: "light", label: "Light" }, { value: "normal", label: "Normal" }, { value: "heavy", label: "Heavy" }] },
+    ],
   },
 
+  {
+    id: "charging",
+    label: "Start Charging",
+    description: "Toggle battery charging on or off",
+    icon: Battery,
+    color: "text-yellow-400",
+    bgColor: "bg-yellow-500/15",
+    borderColor: "border-yellow-500/30",
+    confirmTitle: "Start Charging?",
+    confirmMessage:
+      "This will activate the battery charging system. The rover will charge until you stop it.",
+  },
   {
     id: "emergency_stop",
     label: "Emergency Stop",
@@ -143,11 +190,13 @@ const CONTROL_ACTIONS: ControlAction[] = [
 interface ConfirmDialogProps {
   action: ControlAction;
   sending: boolean;
+  params: Record<string, number | string>;
+  onParamChange: (key: string, value: number | string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-function ConfirmDialog({ action, sending, onConfirm, onCancel }: ConfirmDialogProps) {
+function ConfirmDialog({ action, sending, params, onParamChange, onConfirm, onCancel }: ConfirmDialogProps) {
   const Icon = action.icon;
 
   return (
@@ -173,6 +222,42 @@ function ConfirmDialog({ action, sending, onConfirm, onCancel }: ConfirmDialogPr
         <p className="mb-6 text-center text-sm leading-relaxed text-slate-400">
           {action.confirmMessage}
         </p>
+
+        {/* Parameters */}
+        {action.params && action.params.length > 0 && (
+          <div className="mb-6 space-y-3">
+            {action.params.map((p) => (
+              <div key={p.key}>
+                <label className="mb-1 block text-xs font-medium text-slate-400">
+                  {p.label}{p.unit ? ` (${p.unit})` : ""}
+                </label>
+                {p.type === "number" ? (
+                  <input
+                    type="number"
+                    value={params[p.key] ?? p.defaultValue}
+                    onChange={(e) => onParamChange(p.key, Number(e.target.value))}
+                    min={p.min}
+                    max={p.max}
+                    step={p.step}
+                    disabled={sending}
+                    className="w-full rounded-xl border border-cyan-900/30 bg-[#0a1628] px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-cyan-400/60 focus:outline-none disabled:opacity-50"
+                  />
+                ) : (
+                  <select
+                    value={String(params[p.key] ?? p.defaultValue)}
+                    onChange={(e) => onParamChange(p.key, e.target.value)}
+                    disabled={sending}
+                    className="w-full rounded-xl border border-cyan-900/30 bg-[#0a1628] px-3 py-2.5 text-sm text-white focus:border-cyan-400/60 focus:outline-none disabled:opacity-50"
+                  >
+                    {p.options?.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Buttons */}
         <div className="flex gap-3">
@@ -292,12 +377,47 @@ interface ControlPageProps {
 
 export default function ControlPage({ userId, deviceId }: ControlPageProps) {
   const [pendingAction, setPendingAction] = useState<ControlAction | null>(null);
+  const [pendingParams, setPendingParams] = useState<Record<string, number | string>>({});
   const [sending, setSending] = useState(false);
   const [resultAction, setResultAction] = useState<ControlAction | null>(null);
   const [resultStatus, setResultStatus] = useState<"success" | "error">("success");
   const [resultError, setResultError] = useState<string | undefined>();
+  const [commandLog, setCommandLog] = useState<CommandLogEntry[]>([]);
+  const logRef = useRef<ReturnType<typeof onValue> | null>(null);
+
+  // Listen for command status updates from the ESP32
+  useEffect(() => {
+    if (!userId || !deviceId) return;
+    const ref = commandsRef(userId, deviceId);
+    logRef.current = onValue(ref, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) { setCommandLog([]); return; }
+      const entries: CommandLogEntry[] = [];
+      const ACTION_LABELS: Record<string, string> = Object.fromEntries(
+        CONTROL_ACTIONS.map((a) => [a.id, a.label])
+      );
+      for (const [id, val] of Object.entries(data) as [string, Record<string, unknown>][]) {
+        entries.push({
+          id,
+          action: val.action as string,
+          label: ACTION_LABELS[val.action as string] ?? val.action as string,
+          timestamp: val.timestamp as number,
+          status: val.status as CommandLogEntry["status"],
+          parameters: val.parameters as Record<string, number | string> | undefined,
+        });
+      }
+      // Show newest first, limit to last 20
+      entries.sort((a, b) => b.timestamp - a.timestamp);
+      setCommandLog(entries.slice(0, 20));
+    });
+    return () => { if (logRef.current) off(ref, "value", logRef.current); };
+  }, [userId, deviceId]);
 
   const handleActionClick = useCallback((action: ControlAction) => {
+    // Initialize params with defaults
+    const defaults: Record<string, number | string> = {};
+    action.params?.forEach((p) => { defaults[p.key] = p.defaultValue; });
+    setPendingParams(defaults);
     setPendingAction(action);
   }, []);
 
@@ -308,13 +428,12 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
     setSending(true);
 
     try {
-      // Write command to Firebase RTDB
-      // Path: users/{uid}/devices/{deviceId}/commands/{commandId}
       const newRef = push(commandsRef(userId, deviceId));
       await set(newRef, {
         action: action.id,
         timestamp: Date.now(),
         status: "pending",
+        parameters: Object.keys(pendingParams).length > 0 ? pendingParams : undefined,
       });
 
       setResultStatus("success");
@@ -326,10 +445,9 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
       setResultError(message);
     } finally {
       setSending(false);
-      // Show result dialog after a tiny delay so the confirm dialog unmounts first
       setTimeout(() => setResultAction(action), 100);
     }
-  }, [pendingAction, userId, deviceId]);
+  }, [pendingAction, pendingParams, userId, deviceId]);
 
   const handleCancel = useCallback(() => {
     setPendingAction(null);
@@ -337,6 +455,10 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
 
   const handleDismissResult = useCallback(() => {
     setResultAction(null);
+  }, []);
+
+  const handleParamChange = useCallback((key: string, value: number | string) => {
+    setPendingParams((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   return (
@@ -415,10 +537,23 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
               key={preset.label}
               type="button"
               disabled={sending}
-              onClick={() => {
-                // Send the first action as a quick command
-                const firstAction = CONTROL_ACTIONS.find((a) => preset.actions.includes(a.id));
-                if (firstAction) handleActionClick(firstAction);
+              onClick={async () => {
+                // Send all actions in the preset sequentially
+                for (const actionId of preset.actions) {
+                  const action = CONTROL_ACTIONS.find((a) => a.id === actionId);
+                  if (!action) continue;
+                  const defaults: Record<string, number | string> = {};
+                  action.params?.forEach((p) => { defaults[p.key] = p.defaultValue; });
+                  const newRef = push(commandsRef(userId, deviceId));
+                  await set(newRef, {
+                    action: action.id,
+                    timestamp: Date.now(),
+                    status: "pending",
+                    parameters: Object.keys(defaults).length > 0 ? defaults : undefined,
+                  });
+                  // Small delay between commands so timestamps are distinct
+                  await new Promise((r) => setTimeout(r, 100));
+                }
               }}
               className="rounded-xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-2 text-xs font-medium text-slate-300 transition-all hover:border-cyan-500/30 hover:text-cyan-400 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -428,11 +563,53 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
         </div>
       </div>
 
+      {/* ── Command Log ── */}
+      {commandLog.length > 0 && (
+        <div className="mt-6">
+          <h3 className="mb-3 text-sm font-bold text-slate-300">Recent Commands</h3>
+          <div className="space-y-2">
+            {commandLog.map((entry) => (
+              <div key={entry.id} className="flex items-center gap-3 rounded-xl border border-cyan-900/20 bg-[#0c1a2e] px-4 py-3">
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                  entry.status === "executed" ? "bg-emerald-500/15" : entry.status === "failed" ? "bg-red-500/15" : "bg-amber-500/15"
+                }`}>
+                  {entry.status === "executed" ? (
+                    <Check className="h-4 w-4 text-emerald-400" />
+                  ) : entry.status === "failed" ? (
+                    <X className="h-4 w-4 text-red-400" />
+                  ) : (
+                    <Clock className="h-4 w-4 text-amber-400" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">{entry.label}</span>
+                    <span className={`text-[10px] font-medium ${
+                      entry.status === "executed" ? "text-emerald-400" : entry.status === "failed" ? "text-red-400" : "text-amber-400"
+                    }`}>
+                      {entry.status === "executed" ? "Done" : entry.status === "failed" ? "Failed" : "Pending"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    {new Date(entry.timestamp).toLocaleTimeString()}
+                    {entry.parameters && Object.keys(entry.parameters).length > 0 && (
+                      <> · {Object.entries(entry.parameters).map(([k, v]) => `${k}=${v}`).join(", ")}</>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Confirmation dialog ── */}
       {pendingAction && (
         <ConfirmDialog
           action={pendingAction}
           sending={sending}
+          params={pendingParams}
+          onParamChange={handleParamChange}
           onConfirm={handleConfirm}
           onCancel={handleCancel}
         />

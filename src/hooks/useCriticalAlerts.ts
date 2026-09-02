@@ -46,6 +46,7 @@ const SENSOR_LABELS: Record<SensorKey, string> = {
   moisture: "Soil Moisture",
   waterLevel: "Water Level",
   light: "Light",
+  battery: "Battery",
 };
 
 const SENSOR_UNITS: Record<SensorKey, string> = {
@@ -53,6 +54,7 @@ const SENSOR_UNITS: Record<SensorKey, string> = {
   moisture: "%",
   waterLevel: "%",
   light: "lux",
+  battery: "%",
 };
 
 export function useCriticalAlerts({

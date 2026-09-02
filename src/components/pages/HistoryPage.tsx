@@ -313,7 +313,7 @@ export default function HistoryPage({
               activeSensor={sessionSensor}
               history={viewingData.map((p) => ({
                 timestamp: p.timestamp,
-                value: p[sessionSensor],
+                value: p[sessionSensor] ?? 0,
               }))}
             />
           )}

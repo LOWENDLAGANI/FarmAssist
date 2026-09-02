@@ -91,6 +91,7 @@ export default function ErrorDialog({ error, onClose }: ErrorDialogProps) {
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white"
           >
             <X className="h-4 w-4" />

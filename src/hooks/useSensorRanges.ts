@@ -44,6 +44,10 @@ const DEFAULT_RANGES: SensorRanges = {
     optimalMin: SENSOR_META.light.optimalRange[0],
     optimalMax: SENSOR_META.light.optimalRange[1],
   },
+  battery: {
+    optimalMin: SENSOR_META.battery.optimalRange[0],
+    optimalMax: SENSOR_META.battery.optimalRange[1],
+  },
 };
 
 /**

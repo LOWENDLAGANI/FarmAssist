@@ -635,6 +635,7 @@ export default function AccountPage() {
               <button
                 onClick={() => !linkingEmail && setShowLinkEmailModal(false)}
                 disabled={linkingEmail}
+                aria-label="Close"
                 className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white disabled:opacity-50"
               >
                 <X className="h-4 w-4" />
@@ -777,6 +778,7 @@ export default function AccountPage() {
               <button
                 onClick={() => !deleting && setShowDeleteConfirm(false)}
                 disabled={deleting}
+                aria-label="Close"
                 className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white disabled:opacity-50"
               >
                 <X className="h-4 w-4" />
@@ -867,6 +869,7 @@ export default function AccountPage() {
               <button
                 onClick={() => setUnlinkConfirmProvider(null)}
                 disabled={!!unlinkingProvider}
+                aria-label="Close"
                 className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-[#0f2240] hover:text-white disabled:opacity-50"
               >
                 <X className="h-4 w-4" />

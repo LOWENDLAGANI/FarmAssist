@@ -9,7 +9,7 @@
 "use client";
 
 import Image from "next/image";
-import { Wifi, WifiOff, LogOut } from "lucide-react";
+import { Wifi, WifiOff, LogOut, Battery } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import type { ConnectionStatus } from "@/types/telemetry";
 
@@ -17,11 +17,13 @@ interface TopBarProps {
   status: ConnectionStatus;
   lastUpdated?: number | null;
   deviceId?: string;
+  batteryLevel?: number | null;
 }
 
 export default function TopBar({
   status,
   deviceId,
+  batteryLevel,
 }: TopBarProps) {
   const { user, logOut } = useAuth();
   const isLive = status === "live";
@@ -62,6 +64,20 @@ export default function TopBar({
             {isLive ? "Live" : isStale ? "Not Responding" : "Offline"}
           </span>
         </div>
+
+        {/* Battery status */}
+        {batteryLevel != null && (
+          <div className="flex items-center gap-1.5">
+            <Battery
+              className={`h-5 w-5 ${
+                batteryLevel > 50 ? "text-emerald-400" : batteryLevel > 20 ? "text-amber-400" : "text-red-400"
+              }`}
+            />
+            <span className="text-xs font-medium text-slate-300">
+              {batteryLevel}%
+            </span>
+          </div>
+        )}
 
         {/* User avatar + sign out */}
         {user && (

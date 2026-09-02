@@ -182,6 +182,7 @@ export function useTelemetry(
             moisture: data.moisture,
             waterLevel: data.waterLevel,
             light: data.light,
+            battery: data.battery ?? 100,
             timestamp: now,
           };
 
