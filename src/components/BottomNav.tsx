@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
   CircleUserRound,
   Info,
+  ShieldCheck,
   MoreHorizontal,
   ChevronRight,
   type LucideIcon,
@@ -59,6 +60,8 @@ interface BottomNavProps {
   settingsAlert?: boolean;
   /** Number of unread notifications — shows a red badge on the Alerts tab. */
   unreadCount?: number;
+  /** Whether the current user is the admin — shows the Admin Panel item. */
+  isAdmin?: boolean;
 }
 
 export default function BottomNav({
@@ -66,6 +69,7 @@ export default function BottomNav({
   onNavigate,
   settingsAlert,
   unreadCount = 0,
+  isAdmin,
 }: BottomNavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -99,7 +103,10 @@ export default function BottomNav({
     };
   }, [menuOpen]);
 
-  const isMoreActive = MORE_ITEMS.some((item) => item.id === activePage);
+  const moreItems = isAdmin
+    ? [...MORE_ITEMS, { icon: ShieldCheck, label: "Admin Panel", id: "admin" }]
+    : MORE_ITEMS;
+  const isMoreActive = moreItems.some((item) => item.id === activePage);
 
   return (
     <>
@@ -114,7 +121,7 @@ export default function BottomNav({
           ref={menuRef}
           className="fixed inset-x-2 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-50 overflow-hidden rounded-2xl border border-cyan-900/30 bg-[#0c1a2e]/98 shadow-2xl shadow-black/50 backdrop-blur-xl md:hidden animate-slide-up"
         >
-          {MORE_ITEMS.map((item) => {
+          {moreItems.map((item) => {
             const isActive = activePage === item.id;
             const Icon = item.icon;
             return (

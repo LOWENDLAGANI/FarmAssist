@@ -29,6 +29,8 @@ import { generateRecommendations } from "@/lib/recommendations";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { ref, remove } from "firebase/database";
 import { db } from "@/lib/firebaseConfig";
+import { useBroadcasts } from "@/hooks/useBroadcast";
+import { isAdminUser } from "@/lib/adminConfig";
 import { isOnboardingDone } from "./OnboardingWizard";
 import { alertUser } from "@/lib/notificationSound";
 import Sidebar from "./Sidebar";
@@ -40,6 +42,8 @@ import ChartSection from "./ChartSection";
 import FullScreenChart from "./FullScreenChart";
 import RecommendationPanel from "./RecommendationPanel";
 import WelcomeBanner from "./WelcomeBanner";
+import BroadcastBanner from "./BroadcastBanner";
+import BroadcastModal from "./BroadcastModal";
 import WeatherWidget from "./WeatherWidget";
 import OnboardingWizard from "./OnboardingWizard";
 import ChangelogModal from "./ChangelogModal";
@@ -56,6 +60,7 @@ import SettingsPage from "./pages/SettingsPage";
 import AccountPage from "./pages/AccountPage";
 import ControlPage from "./pages/ControlPage";
 import AboutPage from "./pages/AboutPage";
+import AdminPanelPage from "./pages/AdminPanelPage";
 import {
   SkeletonGauge,
   SkeletonBanner,
@@ -74,6 +79,7 @@ export default function Dashboard() {
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const userId = user?.uid ?? "";
+  const isAdmin = isAdminUser(userId);
 
   // ── Navigation state ──────────────────────────────────────
   const [activePage, setActivePage] = useState("dashboard");
@@ -231,6 +237,10 @@ export default function Dashboard() {
     });
   }, [userId]);
 
+  // ── Broadcast messages (global, admin-sent) ─────────────────
+  const { broadcasts } = useBroadcasts(userId);
+  const latestBroadcast = broadcasts[0] ?? null;
+
   // ── Session actions (simplified) ─────
   const handleStartSession = useCallback(
     async (name?: string) => {
@@ -338,7 +348,7 @@ export default function Dashboard() {
       )}
       <div className="relative z-10 flex h-screen flex-col overflow-hidden md:flex-row">
       {/* ── Sidebar (desktop only; visibility is controlled by CSS) ── */}
-      <Sidebar activePage={activePage} onNavigate={setActivePage} settingsAlert={deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered"} unreadCount={unreadCount} onCollapsedChange={handleSidebarCollapsedChange} />
+      <Sidebar activePage={activePage} onNavigate={setActivePage} settingsAlert={deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered"} unreadCount={unreadCount} onCollapsedChange={handleSidebarCollapsedChange} isAdmin={isAdmin} />
 
       {/* ── Main content area ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -358,6 +368,11 @@ export default function Dashboard() {
         <ErrorBoundary>
           {/* PWA Install Prompt */}
           <PwaInstallBanner />
+
+          {/* Admin broadcast banners (stacked) */}
+          {broadcasts.map((b) =>
+            b.mode !== "popup" ? <BroadcastBanner key={b.id} broadcast={b} /> : null
+          )}
 
           {/* Ownership denied overlay */}
           {deviceLinkStatus === "taken" && activePage !== "settings" && (
@@ -542,8 +557,20 @@ export default function Dashboard() {
               <AboutPage />
             </div>
           )}
+
+          {/* ── Admin Panel (admin only) ── */}
+          {activePage === "admin" && (
+            <div className="animate-fade-in">
+              <AdminPanelPage />
+            </div>
+          )}
         </ErrorBoundary>
         </main>
+
+      {/* ── Latest admin broadcast popup ── */}
+      {latestBroadcast && latestBroadcast.mode !== "banner" && (
+        <BroadcastModal broadcast={latestBroadcast} />
+      )}
 
       {/* ── Full-Screen Chart Modal ── */}
       <FullScreenChart
@@ -559,7 +586,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Bottom Nav (mobile only; visibility is controlled by CSS) ── */}
-      <BottomNav activePage={activePage} onNavigate={setActivePage} settingsAlert={deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered"} unreadCount={unreadCount} />
+      <BottomNav activePage={activePage} onNavigate={setActivePage} settingsAlert={deviceLinkStatus === "taken" || deviceLinkStatus === "unregistered"} unreadCount={unreadCount} isAdmin={isAdmin} />
       </div>
       </div>
     </>

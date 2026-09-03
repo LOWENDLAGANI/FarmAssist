@@ -136,6 +136,7 @@ export default function AccountPage() {
   const [linkPasswordInput, setLinkPasswordInput] = useState("");
   const [linkingEmail, setLinkingEmail] = useState(false);
 
+
   const displayName = user?.displayName ?? "FarmAssist User";
   const email = user?.email ?? "No email linked";
   const photoURL = user?.photoURL ?? null;

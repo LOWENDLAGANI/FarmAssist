@@ -36,6 +36,7 @@ import {
   PanelLeftOpen,
   CircleUserRound,
   Info,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { useAppTheme } from "./ThemeProvider";
@@ -65,9 +66,11 @@ interface SidebarProps {
   unreadCount?: number;
   /** Notifies the parent whenever the collapsed state changes (for content reflow animation). */
   onCollapsedChange?: (collapsed: boolean) => void;
+  /** Whether the current user is the admin — shows the Admin Panel item. */
+  isAdmin?: boolean;
 }
 
-export default function Sidebar({ activePage, onNavigate, settingsAlert, unreadCount = 0, onCollapsedChange }: SidebarProps) {
+export default function Sidebar({ activePage, onNavigate, settingsAlert, unreadCount = 0, onCollapsedChange, isAdmin }: SidebarProps) {
   // Collapse state lives in the synced user settings (Firebase + localStorage fallback)
   const { sidebarCollapsed: collapsed, setSidebarCollapsed } = useAppTheme();
 
@@ -188,7 +191,7 @@ export default function Sidebar({ activePage, onNavigate, settingsAlert, unreadC
 
       {/* ── Nav Items ── */}
       <nav className={`relative flex flex-1 flex-col gap-1 py-4 ${collapsed ? "px-2" : "px-3"}`}>
-        {NAV_ITEMS.map((item) => {
+        {[...NAV_ITEMS, ...(isAdmin ? [{ icon: ShieldCheck, label: "Admin Panel", id: "admin" }] : [])].map((item) => {
           const isActive = activePage === item.id;
           const Icon = item.icon;
           return (

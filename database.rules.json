@@ -16,6 +16,10 @@
         ".read": "auth != null",
         ".write": "auth != null"
       }
+    },
+    "broadcasts": {
+      ".read": "auth != null",
+      ".write": "auth != null && auth.uid === 'tsYo3zKfr8SSowOE23lPQe8Kb0v2'"
     }
   }
 }

@@ -9,6 +9,7 @@
  *   • users/{uid}/devices/{deviceId}/history   — chart history
  *   • users/{uid}/devices/{deviceId}/ranges    — sensor thresholds
  *   • users/{uid}/devices/{deviceId}/sessions  — logging sessions
+ *   • broadcasts/{id}                         — admin broadcast messages (banner/popup/both)
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -208,6 +209,37 @@ export function notificationsRef(userId: string): DatabaseReference {
  */
 export function fcmTokenRef(userId: string): DatabaseReference {
   return ref(db, `users/${userId}/fcmToken`);
+}
+
+// ── Broadcasts (admin) ───────────────────────────────────────
+
+/**
+ * Reference to the global broadcasts node.
+ * Path: broadcasts
+ *
+ * Each child is one broadcast message. The dashboard reads this
+ * node and renders any active broadcast targeting the current user.
+ * Only the single admin account can write (see database.rules.json).
+ *
+ * Shape of each child: {
+ *   message: string,                // text to display
+ *   mode: "banner" | "popup" | "both",
+ *   createdAt: number,              // Date.now()
+ *   audience: "all" | { uids: string[] },
+ *   active: boolean,                // false once stopped
+ *   sentBy: string,                 // admin UID who sent it
+ * }
+ */
+export function broadcastsRef(): DatabaseReference {
+  return ref(db, "broadcasts");
+}
+
+/**
+ * Reference to a single broadcast.
+ * Path: broadcasts/{broadcastId}
+ */
+export function broadcastRef(broadcastId: string): DatabaseReference {
+  return ref(db, `broadcasts/${broadcastId}`);
 }
 
 /**
