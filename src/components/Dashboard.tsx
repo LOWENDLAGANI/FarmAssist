@@ -26,8 +26,9 @@ import { useFCM } from "@/hooks/useFCM";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import type { SensorKey } from "@/types/telemetry";
 import { generateRecommendations } from "@/lib/recommendations";
-import { useProgramme } from "@/hooks/useProgramme";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { ref, remove } from "firebase/database";
+import { db } from "@/lib/firebaseConfig";
 import { isOnboardingDone } from "./OnboardingWizard";
 import { alertUser } from "@/lib/notificationSound";
 import Sidebar from "./Sidebar";
@@ -219,8 +220,16 @@ export default function Dashboard() {
   // ── Onboarding state ───────────────────────────────────────
   const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingDone());
 
-  // ── Programme / phase data for the welcome banner ─────────
-  const { badges: programmeBadges } = useProgramme(userId);
+  // ── Legacy cleanup: delete leftover programme nodes ────────
+  // The programme feature was removed from the app. Older versions
+  // wrote users/{uid}/programme (and seeded it for first-time users),
+  // so remove any stale node on load to keep the database tidy.
+  useEffect(() => {
+    if (!userId) return;
+    remove(ref(db, `users/${userId}/programme`)).catch(() => {
+      // Best-effort cleanup — ignore permission/network errors.
+    });
+  }, [userId]);
 
   // ── Session actions (simplified) ─────
   const handleStartSession = useCallback(
@@ -415,7 +424,7 @@ export default function Dashboard() {
             <div className="animate-fade-in">
               {/* ── Welcome hero banner ── */}
               <div className="animate-slide-up">
-                <WelcomeBanner userName={user?.displayName ?? undefined} badges={programmeBadges} />
+                <WelcomeBanner userName={user?.displayName ?? undefined} />
               </div>
 
               {/* ── Weather widget ── */}

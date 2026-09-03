@@ -17,22 +17,12 @@
 
 "use client";
 
-export interface WelcomeBadge {
-  icon: string;
-  label: string;
-}
-
 interface WelcomeBannerProps {
   /** Display name shown in the greeting. */
   userName?: string;
-  /** Pill badges rendered under the subtitle (derived from programme data). */
-  badges: WelcomeBadge[];
 }
 
-export default function WelcomeBanner({
-  userName,
-  badges,
-}: WelcomeBannerProps) {
+export default function WelcomeBanner({ userName }: WelcomeBannerProps) {
   const displayName = userName?.trim() || "there";
 
   return (
@@ -68,18 +58,6 @@ export default function WelcomeBanner({
         <p className="max-w-md text-sm leading-relaxed text-emerald-100/90 sm:text-base">
           FarmAssist is the best IOT dashboard in the market created by Minetallest. It will make your farm easier to manage
         </p>
-
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {badges.map((badge) => (
-            <span
-              key={badge.label}
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm sm:px-4 sm:py-2 sm:text-sm"
-            >
-              <span aria-hidden="true">{badge.icon}</span>
-              {badge.label}
-            </span>
-          ))}
-        </div>
       </div>
     </section>
   );

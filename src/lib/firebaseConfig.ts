@@ -149,23 +149,6 @@ export function userSettingsRef(userId: string): DatabaseReference {
   return ref(db, `users/${userId}/settings`);
 }
 
-// ── Programme / Phase ─────────────────────────────────────────
-
-/**
- * Reference to the user's programme progress node.
- * Path: users/{uid}/programme
- *
- * Shape: {
- *   phase: string,          // e.g. "Lab I - Online Phase"
- *   startDate: string,      // ISO date, e.g. "2026-08-08"
- *   endDate: string,        // ISO date, e.g. "2026-08-13"
- *   completed: boolean,     // whether the programme is finished
- * }
- */
-export function userProgrammeRef(userId: string): DatabaseReference {
-  return ref(db, `users/${userId}/programme`);
-}
-
 // ── Rover Ownership Registry ─────────────────────────────────
 
 /**
