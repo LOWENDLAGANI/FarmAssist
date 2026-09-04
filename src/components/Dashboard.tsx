@@ -417,8 +417,8 @@ export default function Dashboard() {
       {/* ── Dashboard page ── */}
       {activePage === "dashboard" && (
         roverMode ? (
-          /* Rover Screen Mode — compact at-a-glance home */
-          <div className="h-full animate-fade-in">
+          /* Rover Screen Mode — full-screen at-a-glance home */
+          <div className="h-full min-h-0 animate-fade-in">
             <RoverHome
               values={sensorValues}
               ranges={ranges}
