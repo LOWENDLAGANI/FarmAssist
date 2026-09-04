@@ -35,9 +35,11 @@ import {
 } from "firebase/auth";
 import { onValue } from "firebase/database";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { auth, app, userVerifiedRef } from "@/lib/firebaseConfig";
+import { auth, app, userVerifiedRef, banRef } from "@/lib/firebaseConfig";
 import { ADMIN_UID } from "@/lib/adminConfig";
+import { parseBanRecord, isBanActive, type BanRecord } from "@/lib/bans";
 import InviteCodeGate from "./InviteCodeGate";
+import BanGate from "./BanGate";
 
 interface AuthContextValue {
   /** Current Firebase user, or null if not signed in. */
@@ -75,6 +77,11 @@ interface AuthContextValue {
   sendPasswordReset: (email: string) => Promise<void>;
   /** Sign out. */
   logOut: () => Promise<void>;
+  /**
+   * Active ban for the signed-in user, or null when not banned.
+   * Only populated while a real-time listener is attached.
+   */
+  ban: BanRecord | null;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -87,6 +94,7 @@ const AuthContext = createContext<AuthContextValue>({
   verifyInviteCode: async () => {},
   sendPasswordReset: async () => {},
   logOut: async () => {},
+  ban: null,
 });
 
 export function useAuth() {
@@ -97,6 +105,8 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [verified, setVerified] = useState<boolean | null>(null);
+  // Active ban for the current user (null when not banned / not checked).
+  const [ban, setBan] = useState<BanRecord | null>(null);
 
   // Listen for auth state changes
   useEffect(() => {
@@ -124,6 +134,31 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onValue(ref, (snapshot) => {
       setVerified(snapshot.val() === true);
     });
+    return () => unsubscribe();
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Track the current user's ban record. Expired bans are treated as
+  // no ban, so the gate auto-dismisses the moment a timed ban runs out.
+  useEffect(() => {
+    if (!user) {
+      setBan(null);
+      return;
+    }
+    const ref = banRef(user.uid);
+    const unsubscribe = onValue(
+      ref,
+      (snapshot) => {
+        const record = parseBanRecord(
+          snapshot.val() as Record<string, unknown> | null
+        );
+        setBan(record && isBanActive(record) ? record : null);
+      },
+      (err) => {
+        // Read denied — the updated database rules may not be deployed yet.
+        console.error("[AuthProvider] Failed to read ban record:", err);
+        setBan(null);
+      }
+    );
     return () => unsubscribe();
   }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -185,12 +220,16 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         verifyInviteCode,
         sendPasswordReset,
         logOut,
+        ban,
       }}
     >
       {children}
       {/* Unclosable invite-code gate — blocks the whole app until the
           signed-in account is verified (see InviteCodeGate.tsx). */}
       {user && verified !== true && <InviteCodeGate checking={verified === null} />}
+      {/* Unclosable ban gate — blocks the whole app while the account
+          has an active ban (see BanGate.tsx). */}
+      {user && verified === true && ban && <BanGate ban={ban} />}
     </AuthContext.Provider>
   );
 }

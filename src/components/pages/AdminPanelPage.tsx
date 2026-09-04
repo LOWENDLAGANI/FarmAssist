@@ -16,6 +16,7 @@
 
 import { useState, useEffect } from "react";
 import { push, update, set, onValue, off, type DataSnapshot } from "firebase/database";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import {
   Megaphone,
   Send,
@@ -26,6 +27,12 @@ import {
   ShieldCheck,
   KeyRound,
   RefreshCw,
+  Search,
+  UserX,
+  Ban,
+  ShieldOff,
+  Users,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "../AuthProvider";
 import {
@@ -33,8 +40,23 @@ import {
   type BroadcastMode,
   type BroadcastAudience,
 } from "@/hooks/useBroadcast";
-import { broadcastsRef, broadcastRef, inviteCodeRef } from "@/lib/firebaseConfig";
+import {
+  app,
+  broadcastsRef,
+  broadcastRef,
+  inviteCodeRef,
+  bansRef,
+} from "@/lib/firebaseConfig";
 import { ADMIN_UID } from "@/lib/adminConfig";
+import {
+  BAN_DURATIONS,
+  formatBanDuration,
+  formatBanExpiry,
+  isBanActive,
+  parseBanRecord,
+  type BanRecord,
+  type SearchUserResult,
+} from "@/lib/bans";
 
 const BROADCAST_MODES: Array<{ id: BroadcastMode; label: string; description: string }> = [
   { id: "banner", label: "Banner", description: "Top banner" },
@@ -58,6 +80,53 @@ export default function AdminPanelPage() {
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
   const [broadcastSent, setBroadcastSent] = useState(false);
   const [stoppingBroadcast, setStoppingBroadcast] = useState<string | null>(null);
+
+  // ── Ban tool state ──
+  const [banLookupMode, setBanLookupMode] = useState<"name" | "uid">("name");
+  const [banQuery, setBanQuery] = useState("");
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchUserResult[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<SearchUserResult | null>(null);
+  const [banDurationMs, setBanDurationMs] = useState(BAN_DURATIONS[4].ms); // default: 3 days
+  const [banReason, setBanReason] = useState("");
+  const [banning, setBanning] = useState(false);
+  const [banActionMsg, setBanActionMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [unbanning, setUnbanning] = useState<string | null>(null);
+  const [allBans, setAllBans] = useState<
+    Array<{ uid: string; record: BanRecord; active: boolean }>
+  >([]);
+
+  // Live list of every ban record (admin-only read rule).
+  useEffect(() => {
+    const ref = bansRef();
+    const handle = onValue(
+      ref,
+      (snap: DataSnapshot) => {
+        const data = snap.val() as Record<
+          string,
+          Record<string, unknown>
+        > | null;
+        const list: Array<{ uid: string; record: BanRecord; active: boolean }> =
+          [];
+        if (data) {
+          for (const [uid, raw] of Object.entries(data)) {
+            const record = parseBanRecord(raw);
+            if (!record) continue;
+            list.push({ uid, record, active: isBanActive(record) });
+          }
+        }
+        list.sort((a, b) => b.record.bannedAt - a.record.bannedAt);
+        setAllBans(list);
+      },
+      (err) => {
+        // Read denied — almost always means the new database rules are not deployed yet.
+        console.error("[AdminPanel] Failed to read bans:", err);
+      }
+    );
+    return () => off(ref, "value", handle);
+  }, []);
 
   // ── Invite code state ──
   const [currentInviteCode, setCurrentInviteCode] = useState<string | null>(null);
@@ -157,6 +226,102 @@ export default function AdminPanelPage() {
       setStoppingBroadcast(null);
     }
   };
+
+  // ── Ban tool callables (region must match the deployed functions) ──
+  const functions = getFunctions(app, "asia-southeast1");
+  const searchUsersFn = httpsCallable<{ query: string }, { users: SearchUserResult[] }>(
+    functions,
+    "searchUsers"
+  );
+  const banUserFn = httpsCallable<
+    { uid: string; durationMs: number; reason: string },
+    { banned: boolean }
+  >(functions, "banUser");
+  const unbanUserFn = httpsCallable<{ uid: string }, { unbanned: boolean }>(
+    functions,
+    "unbanUser"
+  );
+
+  /** Pull the server's message out of a httpsCallable error. */
+  const callableError = (err: unknown): string => {
+    const e = err as { code?: string; message?: string } | null;
+    if (!e?.message) return "Something went wrong. Please try again.";
+    const stripped = e.message.match(/^[a-z-]+(?:\(\d*\))?\s*,\s*(.*)$/);
+    return stripped ? stripped[1] : e.message;
+  };
+
+  const handleSearchUsers = async () => {
+    const q = banQuery.trim();
+    if (!q || searchingUsers) return;
+    setSearchingUsers(true);
+    setSearchError(null);
+    setHasSearched(false);
+    try {
+      const res = await searchUsersFn({ query: q });
+      setSearchResults(res.data.users);
+    } catch (err) {
+      console.error("[AdminPanel] User search failed:", err);
+      setSearchError(callableError(err));
+      setSearchResults([]);
+    } finally {
+      setSearchingUsers(false);
+      setHasSearched(true);
+    }
+  };
+
+  const selectUser = (u: SearchUserResult) => {
+    setSelectedUser(u);
+    setBanActionMsg(null);
+    const existing = allBans.find((b) => b.uid === u.uid);
+    setBanReason(existing?.record.reason ?? "");
+  };
+
+  const handleBanUser = async () => {
+    if (!selectedUser || !banReason.trim() || banning) return;
+    setBanning(true);
+    setBanActionMsg(null);
+    try {
+      await banUserFn({
+        uid: selectedUser.uid,
+        durationMs: banDurationMs,
+        reason: banReason.trim(),
+      });
+      setBanActionMsg({
+        ok: true,
+        text: `${
+          selectedUser.displayName ?? selectedUser.email ?? "User"
+        } banned${
+          banDurationMs === 0
+            ? " permanently"
+            : ` for ${formatBanDuration(banDurationMs)}`
+        }.`,
+      });
+      setBanReason("");
+    } catch (err) {
+      console.error("[AdminPanel] Ban failed:", err);
+      setBanActionMsg({ ok: false, text: callableError(err) });
+    } finally {
+      setBanning(false);
+    }
+  };
+
+  const handleUnbanUser = async (uid: string) => {
+    if (unbanning) return;
+    setUnbanning(uid);
+    try {
+      await unbanUserFn({ uid });
+    } catch (err) {
+      console.error("[AdminPanel] Unban failed:", err);
+      setBanActionMsg({ ok: false, text: callableError(err) });
+    } finally {
+      setUnbanning(null);
+    }
+  };
+
+  /** Active ban (if any) for the currently selected user. */
+  const selectedBan = selectedUser
+    ? allBans.find((b) => b.uid === selectedUser.uid) ?? null
+    : null;
 
   // ── Access gate ─────────────────────────────────────────────
   if (!isAdmin) {
@@ -450,6 +615,352 @@ export default function AdminPanelPage() {
           <ShieldCheck className="h-4 w-4 shrink-0 text-lime-400" />
           <p className="text-xs text-lime-400">
             Share this code with the people you want to invite. Users who already verified stay unlocked when you change it.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Ban users tool ── */}
+      <div className="mt-5 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/15">
+            <UserX className="h-4 w-4 text-red-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-white">Ban Users</h3>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Suspend an account for a set time or permanently, with a reason they&apos;ll see.
+              Find them by display name / email or by UID — and lift the ban anytime.
+            </p>
+          </div>
+        </div>
+
+        {/* Lookup mode toggle */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setBanLookupMode("name")}
+            className={`rounded-xl border px-3 py-2.5 text-center transition-all ${
+              banLookupMode === "name"
+                ? "border-red-500/50 bg-red-500/15 text-red-300"
+                : "border-cyan-900/20 bg-[#0a1628] text-slate-400 hover:border-red-500/30 hover:text-slate-200"
+            }`}
+          >
+            <span className="block text-sm font-semibold">Search by name / email</span>
+            <span className="block text-[10px] text-slate-500">Pick from a list of accounts</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setBanLookupMode("uid")}
+            className={`rounded-xl border px-3 py-2.5 text-center transition-all ${
+              banLookupMode === "uid"
+                ? "border-red-500/50 bg-red-500/15 text-red-300"
+                : "border-cyan-900/20 bg-[#0a1628] text-slate-400 hover:border-red-500/30 hover:text-slate-200"
+            }`}
+          >
+            <span className="block text-sm font-semibold">By account UID</span>
+            <span className="block text-[10px] text-slate-500">When you only have the UID</span>
+          </button>
+        </div>
+
+        {/* Search input + action */}
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            type="text"
+            value={banQuery}
+            onChange={(e) => {
+              setBanQuery(e.target.value);
+              setSearchError(null);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && handleSearchUsers()}
+            placeholder={
+              banLookupMode === "uid"
+                ? "Paste a user's UID…"
+                : "Display name or email…"
+            }
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            className="min-w-0 flex-1 rounded-xl border border-cyan-500/30 bg-[#0a1628] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-red-400/60 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleSearchUsers}
+            disabled={searchingUsers || !banQuery.trim()}
+            className="flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-400 transition-all hover:bg-red-500/20 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {searchingUsers ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            {banLookupMode === "uid" ? "Look up" : "Search"}
+          </button>
+        </div>
+        {banLookupMode === "uid" && (
+          <p className="mt-1.5 text-[10px] text-slate-500">
+            Don&apos;t know whose UID it is? Paste it here and we&apos;ll show who it belongs to before you ban.
+          </p>
+        )}
+
+        {searchError && (
+          <div className="mt-3 rounded-xl border border-red-800/40 bg-red-950/30 p-3">
+            <p className="text-xs text-red-400">{searchError}</p>
+          </div>
+        )}
+        {hasSearched && !searchingUsers && !searchError && searchResults.length === 0 && (
+          <div className="mt-3 rounded-xl border border-cyan-900/20 bg-[#0a1628] p-3">
+            <p className="text-xs text-slate-400">
+              No accounts match &ldquo;{banQuery.trim()}&rdquo;.
+            </p>
+          </div>
+        )}
+
+        {/* Search results */}
+        {searchResults.length > 0 && (
+          <div className="mt-3 space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              {searchResults.length} result{searchResults.length === 1 ? "" : "s"}
+            </p>
+            {searchResults.map((u) => {
+              const banned = allBans.find((b) => b.uid === u.uid);
+              const isSelected = selectedUser?.uid === u.uid;
+              return (
+                <button
+                  key={u.uid}
+                  type="button"
+                  onClick={() => selectUser(u)}
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                    isSelected
+                      ? "border-red-500/40 bg-red-500/10"
+                      : "border-cyan-900/20 bg-[#0a1628] hover:border-cyan-500/30 hover:bg-[#0f2240]"
+                  }`}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-[11px] font-bold text-cyan-400">
+                    {(u.displayName ?? u.email ?? "?").slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-semibold text-slate-200">
+                      {u.displayName ?? (
+                        <span className="text-slate-500">No display name</span>
+                      )}
+                    </span>
+                    <span className="block truncate text-[11px] text-slate-500">
+                      {u.email ?? "No email"}
+                    </span>
+                    <span className="block truncate font-mono text-[10px] text-cyan-400/70">
+                      {u.uid}
+                    </span>
+                  </span>
+                  {banned && (
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        banned.active
+                          ? "border border-red-500/30 bg-red-500/10 text-red-400"
+                          : "border border-slate-600/30 bg-slate-600/10 text-slate-400"
+                      }`}
+                    >
+                      {banned.active ? "BANNED" : "EXPIRED"}
+                    </span>
+                  )}
+                  <span className="shrink-0 text-[10px] font-semibold text-red-400">
+                    {isSelected ? "Selected" : "Select"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Selected user — ban composer */}
+        {selectedUser && (
+          <div className="mt-4 rounded-xl border border-red-500/25 bg-[#0a1628] p-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-xs font-bold text-red-400">
+                {(selectedUser.displayName ?? selectedUser.email ?? "?").slice(0, 2).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white">
+                  {selectedUser.displayName ?? (
+                    <span className="text-slate-500">No display name</span>
+                  )}
+                </p>
+                <p className="truncate text-[11px] text-slate-500">
+                  {selectedUser.email ?? "No email"}
+                </p>
+                <p className="truncate font-mono text-[10px] text-cyan-400/70">
+                  {selectedUser.uid}
+                </p>
+              </div>
+            </div>
+
+            {selectedBan?.active && (
+              <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-red-400">
+                  Currently banned
+                </p>
+                <p className="mt-1 text-xs text-red-200">{selectedBan.record.reason}</p>
+                <p className="mt-0.5 text-[10px] text-red-300/70">
+                  {selectedBan.record.expiresAt === 0
+                    ? "Permanent ban"
+                    : `Lifts ${formatBanExpiry(selectedBan.record.expiresAt)}`}{" "}
+                  — banning again updates the ban.
+                </p>
+              </div>
+            )}
+
+            <p className="mb-2 mt-4 text-xs font-medium text-slate-400">How long</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {BAN_DURATIONS.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setBanDurationMs(d.ms)}
+                  className={`rounded-xl border px-3 py-2 text-center text-xs font-semibold transition-all ${
+                    banDurationMs === d.ms
+                      ? "border-red-500/50 bg-red-500/15 text-red-300"
+                      : "border-cyan-900/20 bg-[#0a1628] text-slate-400 hover:border-red-500/30 hover:text-slate-200"
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mb-2 mt-4 text-xs font-medium text-slate-400">
+              Reason (shown to the user)
+            </p>
+            <textarea
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="e.g. Repeatedly spamming commands — contact the owner to appeal."
+              className="w-full resize-none rounded-xl border border-cyan-500/30 bg-[#0a1628] px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-red-400/60 focus:outline-none"
+            />
+            <p className="mt-1 text-right text-[10px] text-slate-500">
+              {banReason.length}/500
+            </p>
+
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleBanUser}
+                disabled={banning || !banReason.trim()}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-red-500 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {banning ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Ban className="h-4 w-4" />
+                )}
+                {banning
+                  ? "Banning…"
+                  : selectedBan?.active
+                    ? "Update Ban"
+                    : "Ban User"}
+              </button>
+              {selectedBan?.active && (
+                <button
+                  type="button"
+                  onClick={() => handleUnbanUser(selectedUser.uid)}
+                  disabled={unbanning === selectedUser.uid}
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-400 transition-all hover:bg-emerald-500/20 active:scale-[0.98] disabled:opacity-50"
+                >
+                  {unbanning === selectedUser.uid ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ShieldOff className="h-4 w-4" />
+                  )}
+                  Unban
+                </button>
+              )}
+            </div>
+
+            {banActionMsg && (
+              <div
+                className={`mt-3 rounded-xl border p-3 ${
+                  banActionMsg.ok
+                    ? "border-emerald-500/20 bg-emerald-500/10"
+                    : "border-red-800/40 bg-red-950/30"
+                }`}
+              >
+                <p
+                  className={`text-xs ${
+                    banActionMsg.ok ? "text-emerald-400" : "text-red-400"
+                  }`}
+                >
+                  {banActionMsg.text}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* All bans list */}
+        {allBans.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <Users className="h-3.5 w-3.5" aria-hidden="true" />
+              All bans ({allBans.length})
+            </p>
+            {allBans.map((b) => (
+              <div
+                key={b.uid}
+                className="flex items-start gap-2.5 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-3 py-2.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-slate-200">
+                    {b.record.displayName ?? b.record.email ?? "Unknown user"}
+                  </p>
+                  <p className="truncate font-mono text-[10px] text-cyan-400/70">
+                    {b.uid}
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-400">
+                    {b.record.reason}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-slate-500">
+                    Banned {new Date(b.record.bannedAt).toLocaleDateString()} ·{" "}
+                    {b.active ? (
+                      <span className="text-red-400">
+                        until {formatBanExpiry(b.record.expiresAt)}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">
+                        expired {formatBanExpiry(b.record.expiresAt)}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleUnbanUser(b.uid)}
+                  disabled={unbanning === b.uid}
+                  title={b.active ? "Lift this ban" : "Remove this expired record"}
+                  aria-label={b.active ? "Unban user" : "Remove expired ban"}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold transition-all active:scale-[0.98] disabled:opacity-50 ${
+                    b.active
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                      : "border-slate-600/30 bg-slate-600/10 text-slate-400 hover:bg-slate-600/20"
+                  }`}
+                >
+                  {unbanning === b.uid ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : b.active ? (
+                    <ShieldOff className="h-3 w-3" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                  {b.active ? "Unban" : "Remove"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3.5 py-2.5">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-red-400" />
+          <p className="text-xs text-red-400">
+            Banned users are locked out of the app immediately, and timed bans auto-expire. You can lift any ban here at any time.
           </p>
         </div>
       </div>

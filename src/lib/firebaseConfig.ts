@@ -269,6 +269,31 @@ export function broadcastRef(broadcastId: string): DatabaseReference {
   return ref(db, `broadcasts/${broadcastId}`);
 }
 
+// ── Bans (admin) ────────────────────────────────────────────
+
+/**
+ * Reference to the global bans node.
+ * Path: bans
+ *
+ * Each child key is a banned user's UID. Records are written ONLY by
+ * the server-side banUser/unbanUser callables — clients cannot write.
+ * The banned user can read their own record (to show the ban screen)
+ * and the admin can read everything (see database.rules.json).
+ *
+ * Shape of each child: see src/lib/bans.ts (BanRecord).
+ */
+export function bansRef(): DatabaseReference {
+  return ref(db, "bans");
+}
+
+/**
+ * Reference to a single user's ban record.
+ * Path: bans/{uid} — yields nothing when the user isn't banned.
+ */
+export function banRef(userId: string): DatabaseReference {
+  return ref(db, `bans/${userId}`);
+}
+
 /**
  * Firebase Cloud Messaging instance (browser only).
  * Returns null on the server or if messaging is unsupported.

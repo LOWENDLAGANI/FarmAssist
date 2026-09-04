@@ -44,7 +44,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onRoverOffline = exports.sendSms = exports.askAssistant = exports.onSensorAlert = exports.verifyInviteCode = exports.registerWithInvite = void 0;
+exports.onRoverOffline = exports.sendSms = exports.askAssistant = exports.onSensorAlert = exports.unbanUser = exports.banUser = exports.searchUsers = exports.verifyInviteCode = exports.registerWithInvite = void 0;
 const app_1 = require("firebase-admin/app");
 const auth_1 = require("firebase-admin/auth");
 const database_1 = require("firebase-admin/database");
@@ -172,6 +172,155 @@ exports.verifyInviteCode = (0, https_1.onCall)({}, async (request) => {
     }
     await db.ref(`users/${uid}/verified`).set(true);
     return { verified: true };
+});
+// ── User Bans (admin) ────────────────────────────────────────
+// Ban records live at `bans/{uid}` in RTDB. Only these callables
+// (which run with the Admin SDK and bypass rules) may write them —
+// clients can read their own record (ban screen) but never write.
+//
+//   • searchUsers — admin-only; finds accounts by UID, email or
+//     display name (the admin doesn't always know who a UID is).
+//   • banUser     — admin-only; writes/updates `bans/{uid}` with a
+//     reason + expiry (0 = permanent).
+//   • unbanUser   — admin-only; removes `bans/{uid}` (reverts a ban).
+const MAX_BAN_REASON = 500;
+const MAX_BAN_DURATION_MS = 100 * 365 * 24 * 60 * 60 * 1000; // ~100 years
+/**
+ * Callable: admin-only user lookup. Searches Firebase Auth accounts
+ * by UID, email, or display name (case-insensitive prefix/substring)
+ * and returns the first batch of matches so the admin can pick the
+ * right account before banning.
+ */
+exports.searchUsers = (0, https_1.onCall)({}, async (request) => {
+    var _a, _b, _c;
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Sign in to search users.");
+    }
+    if (request.auth.uid !== OWNER_UID) {
+        throw new https_1.HttpsError("permission-denied", "Only the owner can search users.");
+    }
+    const { query } = ((_a = request.data) !== null && _a !== void 0 ? _a : {});
+    const q = typeof query === "string" ? query.trim().toLowerCase() : "";
+    if (!q)
+        return { users: [] };
+    const users = [];
+    // listUsers is paginated; scan up to ~10k accounts (an invite-only
+    // app will be far smaller) and stop once we have enough matches.
+    let pageToken;
+    for (let page = 0; page < 10 && users.length < 25; page++) {
+        const list = await (0, auth_1.getAuth)().listUsers(1000, pageToken);
+        for (const u of list.users) {
+            const uid = u.uid.toLowerCase();
+            const email = ((_b = u.email) !== null && _b !== void 0 ? _b : "").toLowerCase();
+            const name = ((_c = u.displayName) !== null && _c !== void 0 ? _c : "").toLowerCase();
+            if (uid === q ||
+                uid.startsWith(q) ||
+                email === q ||
+                email.includes(q) ||
+                name === q ||
+                name.includes(q)) {
+                users.push({
+                    uid: u.uid,
+                    displayName: u.displayName,
+                    email: u.email,
+                    photoURL: u.photoURL,
+                    disabled: u.disabled,
+                });
+                if (users.length >= 25)
+                    break;
+            }
+        }
+        pageToken = list.pageToken;
+        if (!pageToken)
+            break;
+    }
+    return { users };
+});
+/**
+ * Callable: admin-only. Bans (or re-bans, updating the record) a user
+ * with a required reason and a duration. The record stores a profile
+ * snapshot (display name / email) so the admin panel stays readable.
+ */
+exports.banUser = (0, https_1.onCall)({}, async (request) => {
+    var _a, _b, _c, _d, _e, _f, _g;
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Sign in to ban users.");
+    }
+    if (request.auth.uid !== OWNER_UID) {
+        throw new https_1.HttpsError("permission-denied", "Only the owner can ban users.");
+    }
+    const { uid, durationMs, reason } = ((_a = request.data) !== null && _a !== void 0 ? _a : {});
+    const targetUid = typeof uid === "string" ? uid.trim() : "";
+    const cleanReason = typeof reason === "string" ? reason.trim() : "";
+    if (!targetUid) {
+        throw new https_1.HttpsError("invalid-argument", "A user UID is required to ban.");
+    }
+    if (!cleanReason) {
+        throw new https_1.HttpsError("invalid-argument", "Please provide a reason for the ban.");
+    }
+    if (cleanReason.length > MAX_BAN_REASON) {
+        throw new https_1.HttpsError("invalid-argument", `The reason must be under ${MAX_BAN_REASON} characters.`);
+    }
+    if (typeof durationMs !== "number" ||
+        !Number.isFinite(durationMs) ||
+        durationMs < 0) {
+        throw new https_1.HttpsError("invalid-argument", "Please choose how long the ban should last.");
+    }
+    if (durationMs > MAX_BAN_DURATION_MS) {
+        throw new https_1.HttpsError("invalid-argument", "That ban duration is too long.");
+    }
+    if (targetUid === OWNER_UID) {
+        throw new https_1.HttpsError("invalid-argument", "You can't ban the admin account.");
+    }
+    let userRecord;
+    try {
+        userRecord = await (0, auth_1.getAuth)().getUser(targetUid);
+    }
+    catch (err) {
+        if ((err === null || err === void 0 ? void 0 : err.code) === "auth/user-not-found") {
+            throw new https_1.HttpsError("not-found", "No account has that UID. Double-check the UID and try again.");
+        }
+        logger.error("banUser getUser failed:", (_c = (_b = err === null || err === void 0 ? void 0 : err.code) !== null && _b !== void 0 ? _b : err === null || err === void 0 ? void 0 : err.message) !== null && _c !== void 0 ? _c : err);
+        throw new https_1.HttpsError("internal", "Couldn't look up that account. Please try again.");
+    }
+    const now = Date.now();
+    const record = {
+        uid: targetUid,
+        displayName: (_d = userRecord.displayName) !== null && _d !== void 0 ? _d : null,
+        email: (_e = userRecord.email) !== null && _e !== void 0 ? _e : null,
+        photoURL: (_f = userRecord.photoURL) !== null && _f !== void 0 ? _f : null,
+        reason: cleanReason,
+        bannedAt: now,
+        // 0 = permanent; otherwise the timestamp the ban lifts.
+        expiresAt: durationMs === 0 ? 0 : now + durationMs,
+        bannedBy: request.auth.uid,
+    };
+    await db.ref(`bans/${targetUid}`).set(record);
+    logger.info(`Banned ${targetUid} (${(_g = record.email) !== null && _g !== void 0 ? _g : "no email"}) ${durationMs === 0
+        ? "permanently"
+        : `until ${new Date(record.expiresAt).toISOString()}`}: ${cleanReason}`);
+    return { banned: true, ban: record };
+});
+/**
+ * Callable: admin-only. Removes a user's ban record, instantly
+ * lifting the ban (the user's app re-checks bans/{uid} in real time).
+ */
+exports.unbanUser = (0, https_1.onCall)({}, async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Sign in to unban users.");
+    }
+    if (request.auth.uid !== OWNER_UID) {
+        throw new https_1.HttpsError("permission-denied", "Only the owner can unban users.");
+    }
+    const { uid } = ((_a = request.data) !== null && _a !== void 0 ? _a : {});
+    const targetUid = typeof uid === "string" ? uid.trim() : "";
+    if (!targetUid) {
+        throw new https_1.HttpsError("invalid-argument", "A user UID is required to unban.");
+    }
+    await db.ref(`bans/${targetUid}`).remove();
+    logger.info(`Unbanned ${targetUid}`);
+    return { unbanned: true };
 });
 // Lazy-load cached system prompt to prevent top-level initialization timeouts
 let cachedSystemPrompt = null;
