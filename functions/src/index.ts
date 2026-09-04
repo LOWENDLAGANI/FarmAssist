@@ -34,15 +34,19 @@ const OWNER_UID = "tsYo3zKfr8SSowOE23lPQe8Kb0v2";
 
 // ── Invite-code registration ────────────────────────────────────
 // Every new account must be unlocked with the single shared invite
-// code stored in the database at `inviteCode/code`.
+// code stored in the database at `inviteCode/code` — UNLESS the
+// admin has turned invite codes off by writing `inviteConfig/required`
+// = false from the admin panel (open registration).
 //
 //   • Email/password accounts are ONLY created server-side by
 //     `registerWithInvite`, which refuses to create the account when
-//     the code is missing or wrong.
+//     the code is missing or wrong (invite-only mode). When invites
+//     are off, any valid signup is accepted without a code.
 //   • Google accounts are created by Google first (unavoidable), then
 //     the app shows an unclosable popup that calls `verifyInviteCode`.
 //     Until it succeeds, `users/{uid}/verified` stays unverified and
-//     the popup keeps blocking the app.
+//     the popup keeps blocking the app. When invites are off the
+//     popup becomes a one-tap Continue that unlocks the account.
 //   • `blockDirectSignup` rejects client-side email/password signup so
 //     nobody can bypass the invite code. (Admin SDK user creation does
 //     NOT trigger blocking functions, which is why the callable path
@@ -61,9 +65,24 @@ async function getInviteCode(): Promise<string | null> {
 }
 
 /**
- * Callable: creates an email/password account ONLY when the invite
- * code is valid. The account is created with the Admin SDK and marked
- * verified immediately — no account is created when the code is wrong.
+ * Whether registration currently requires the shared invite code.
+ * The admin toggles this in the admin panel (`inviteConfig/required`).
+ * When the flag is missing it defaults to true (invite-only), which
+ * preserves the original behavior.
+ */
+async function isInviteRequired(): Promise<boolean> {
+  const snap = await db.ref("inviteConfig/required").get();
+  return snap.val() !== false;
+}
+
+/**
+ * Callable: creates an email/password account. When registration is
+ * invite-only (the default), the account is created ONLY when the
+ * invite code is valid — no account is created when the code is wrong.
+ * When the admin has turned invite codes off (`inviteConfig/required`
+ * is false), the code is optional and any valid signup is accepted.
+ * The account is created with the Admin SDK and marked verified
+ * immediately.
  *
  * (A beforeUserCreated blocking function would also block raw client
  * SDK signups, but it requires the project to be upgraded to Identity
@@ -101,25 +120,30 @@ export const registerWithInvite = onCall({}, async (request) => {
   if (!cleanName || cleanName.length > 60) {
     throw new HttpsError("invalid-argument", "Please enter your name.");
   }
-  if (!cleanCode) {
-    throw new HttpsError(
-      "invalid-argument",
-      "An invite code is required to register."
-    );
-  }
 
-  const storedCode = await getInviteCode();
-  if (!storedCode) {
-    throw new HttpsError(
-      "failed-precondition",
-      "Invite registration isn't configured yet. Ask the owner to set an invite code."
-    );
-  }
-  if (normalizeCode(cleanCode) !== normalizeCode(storedCode)) {
-    throw new HttpsError(
-      "invalid-argument",
-      "That invite code isn't valid. Registration is invite-only — ask the owner for the code."
-    );
+  // Invite-only mode: the code is mandatory and must match the stored one.
+  // Open mode (invite codes turned off in the admin panel): skip the check.
+  const inviteRequired = await isInviteRequired();
+  if (inviteRequired) {
+    if (!cleanCode) {
+      throw new HttpsError(
+        "invalid-argument",
+        "An invite code is required to register."
+      );
+    }
+    const storedCode = await getInviteCode();
+    if (!storedCode) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Invite registration isn't configured yet. Ask the owner to set an invite code."
+      );
+    }
+    if (normalizeCode(cleanCode) !== normalizeCode(storedCode)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "That invite code isn't valid. Registration is invite-only — ask the owner for the code."
+      );
+    }
   }
 
   let uid: string;
@@ -166,6 +190,16 @@ export const verifyInviteCode = onCall({}, async (request) => {
   const uid = request.auth.uid;
   const { inviteCode } = (request.data ?? {}) as { inviteCode?: unknown };
   const cleanCode = typeof inviteCode === "string" ? inviteCode : "";
+
+  // Open mode (admin turned invite codes off): no code needed — unlock
+  // any signed-in account (including Google sign-ups that never had a
+  // chance to enter a code).
+  const inviteRequired = await isInviteRequired();
+  if (!inviteRequired) {
+    await db.ref(`users/${uid}/verified`).set(true);
+    return { verified: true };
+  }
+
   if (!cleanCode) {
     throw new HttpsError(
       "invalid-argument",

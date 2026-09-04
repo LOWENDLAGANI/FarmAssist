@@ -8,6 +8,10 @@
  * `true` (see AuthProvider). There is deliberately no close button,
  * no backdrop click, and no Escape handler — the only way past is the
  * correct invite code. A wrong code keeps the popup up with an error.
+ *
+ * When the admin has turned invite codes OFF (open registration), the
+ * gate instead becomes a one-tap Continue screen: the server unlocks
+ * the account without any code.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -23,24 +27,30 @@ function gateError(err: unknown): string {
   if (!e?.message) return "Something went wrong. Please try again.";
   // httpsCallable can prefix the message with the error code
   // (e.g. "permission-denied, ..." or "internal(0), ...").
-  const stripped = e.message.match(/^[a-z-]+(?:\(\d*\))?\s*,\s*(.*)$/);
+  const stripped = e.message.match(/^[a-z-]+(?:\\(\\d*\\))?\\s*,\\s*(.*)$/);
   return stripped ? stripped[1] : e.message;
 }
 
 export default function InviteCodeGate({ checking }: { checking: boolean }) {
-  const { verifyInviteCode } = useAuth();
+  const { verifyInviteCode, inviteRequired } = useAuth();
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  // While the account flag is being checked (or invite codes are
+  // required) we show the code form; when invites are OFF the gate
+  // becomes a one-tap Continue that unlocks without any code.
+  const openMode = inviteRequired === false;
+
+  const handleSubmit = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (submitting) return;
     const trimmed = code.trim();
-    if (!trimmed || submitting) return;
+    if (!openMode && !trimmed) return;
     setError(null);
     setSubmitting(true);
     try {
-      await verifyInviteCode(trimmed);
+      await verifyInviteCode(openMode ? "" : trimmed);
       // Success: AuthProvider flips the verified flag and this gate unmounts.
     } catch (err) {
       console.error("[InviteCodeGate] Verification failed:", err);
@@ -71,7 +81,42 @@ export default function InviteCodeGate({ checking }: { checking: boolean }) {
               Checking your account…
             </p>
           </div>
+        ) : openMode ? (
+          /* ── Open registration: no invite code needed ── */
+          <div className="rounded-3xl border border-lime-500/25 bg-[#16290f]/85 p-8 shadow-2xl shadow-black/40 backdrop-blur-md animate-scale-in">
+            <div className="mb-5 text-center">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-lime-500/15">
+                <ShieldCheck className="h-7 w-7 text-lime-400" />
+              </div>
+              <h2 className="text-lg font-bold text-white">You&apos;re all set!</h2>
+              <p className="mt-1 text-xs leading-relaxed text-lime-200/70">
+                Invite codes aren&apos;t required right now — anyone can
+                create an account. Tap continue to open FarmAssist.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleSubmit()}
+              disabled={submitting}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-lime-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-lime-900/30 transition-all hover:bg-lime-500 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sprout className="h-4 w-4" />
+              )}
+              {submitting ? "Unlocking…" : "Continue to FarmAssist"}
+            </button>
+
+            {error && (
+              <div className="mt-3 rounded-xl border border-red-800/40 bg-red-950/30 p-3">
+                <p className="text-center text-sm text-red-400">{error}</p>
+              </div>
+            )}
+          </div>
         ) : (
+          /* ── Invite-only: code is required ── */
           <div className="rounded-3xl border border-lime-500/25 bg-[#16290f]/85 p-8 shadow-2xl shadow-black/40 backdrop-blur-md animate-scale-in">
             <div className="mb-5 text-center">
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-lime-500/15">

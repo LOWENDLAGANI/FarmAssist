@@ -33,6 +33,8 @@ import {
   ShieldOff,
   Users,
   Trash2,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { useAuth } from "../AuthProvider";
 import {
@@ -45,6 +47,7 @@ import {
   broadcastsRef,
   broadcastRef,
   inviteCodeRef,
+  inviteConfigRef,
   bansRef,
 } from "@/lib/firebaseConfig";
 import { ADMIN_UID } from "@/lib/adminConfig";
@@ -135,6 +138,33 @@ export default function AdminPanelPage() {
   const [inviteCodeSaved, setInviteCodeSaved] = useState(false);
   const [inviteCodeError, setInviteCodeError] = useState<string | null>(null);
 
+  // ── Registration mode state (invite-only vs. open) ──
+  const [inviteRequired, setInviteRequired] = useState(true);
+  const [inviteConfigLoaded, setInviteConfigLoaded] = useState(false);
+  const [savingInviteConfig, setSavingInviteConfig] = useState(false);
+  const [inviteConfigError, setInviteConfigError] = useState<string | null>(null);
+
+  // Listen for the registration mode (public read rule; admin-only write).
+  useEffect(() => {
+    const ref = inviteConfigRef();
+    const handle = onValue(
+      ref,
+      (snap: DataSnapshot) => {
+        const data = snap.val() as { required?: unknown } | null;
+        setInviteRequired(data?.required !== false);
+        setInviteConfigLoaded(true);
+        setInviteConfigError(null);
+      },
+      (err) => {
+        console.error("[AdminPanel] Failed to read invite config:", err);
+        setInviteConfigError(
+          "Couldn't load the registration mode — this usually means the updated database rules haven't been deployed yet (firebase deploy --only database)."
+        );
+      }
+    );
+    return () => off(ref, "value", handle);
+  }, []);
+
   // Listen for the current invite code (admin-only read rule).
   useEffect(() => {
     const ref = inviteCodeRef();
@@ -163,6 +193,27 @@ export default function AdminPanelPage() {
     setInviteCodeDraft(`FARM-${code}`);
     setInviteCodeSaved(false);
     setInviteCodeError(null);
+  };
+
+  /** Persist the registration mode (invite-only vs. open). */
+  const handleSetInviteRequired = async (next: boolean) => {
+    if (!user || !inviteConfigLoaded || savingInviteConfig) return;
+    setSavingInviteConfig(true);
+    setInviteConfigError(null);
+    try {
+      await set(inviteConfigRef(), {
+        required: next,
+        updatedAt: Date.now(),
+        updatedBy: user.uid,
+      });
+    } catch (err) {
+      console.error("[AdminPanel] Failed to update registration mode:", err);
+      setInviteConfigError(
+        "Couldn't update the registration mode — this usually means the updated database rules haven't been deployed yet (firebase deploy --only database)."
+      );
+    } finally {
+      setSavingInviteConfig(false);
+    }
   };
 
   const handleSaveInviteCode = async () => {
@@ -342,8 +393,12 @@ export default function AdminPanelPage() {
     );
   }
 
+  // The cards are stacked in a flex column so the Invite Code card can
+  // jump to the top on mobile — admins toggle registration in one tap
+  // without scrolling past the whole Broadcast tool. Desktop keeps the
+  // original order (Broadcast first).
   return (
-    <div>
+    <div className="flex flex-col">
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-xl font-bold text-white">Admin Panel</h2>
@@ -353,7 +408,7 @@ export default function AdminPanelPage() {
       </div>
 
       {/* ── Broadcast tool ── */}
-      <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up">
+      <div className="order-2 mt-5 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up md:order-none md:mt-0">
         <div className="mb-4 flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15">
             <Megaphone className="h-4 w-4 text-amber-400" />
@@ -544,8 +599,9 @@ export default function AdminPanelPage() {
         </div>
       </div>
 
-      {/* ── Invite code tool ── */}
-      <div className="mt-5 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up">
+      {/* ── Invite code tool (shown first on mobile so the
+              registration-mode toggle is one tap away) ── */}
+      <div className="order-first mt-0 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up md:order-none md:mt-5">
         <div className="mb-4 flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lime-500/15">
             <KeyRound className="h-4 w-4 text-lime-400" />
@@ -553,10 +609,69 @@ export default function AdminPanelPage() {
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-white">Invite Code</h3>
             <p className="mt-0.5 text-xs text-slate-400">
-              Every new account needs this single code to register (email) or unlock the app (Google). Change it to invalidate the old one.
+              {inviteRequired
+                ? "Every new account needs this single code to register (email) or unlock the app (Google). Change it to invalidate the old one."
+                : "Registration is open — no invite code is being asked for right now. Keep a code saved so you can flip back to invite-only anytime."}
             </p>
           </div>
         </div>
+
+        {/* Registration mode: invite-only vs. open registration */}
+        <div className="mb-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-medium text-slate-400">Registration mode</p>
+            {savingInviteConfig && (
+              <span className="flex items-center gap-1.5 text-[10px] text-lime-400">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Saving…
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => handleSetInviteRequired(true)}
+              disabled={!inviteConfigLoaded || savingInviteConfig || inviteRequired}
+              className={`flex flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-center transition-all ${
+                inviteRequired
+                  ? "border-lime-500/50 bg-lime-500/15 text-lime-300"
+                  : "border-cyan-900/20 bg-[#0a1628] text-slate-400 hover:border-lime-500/30 hover:text-slate-200"
+              }`}
+            >
+              <Lock className="h-4 w-4" />
+              <span className="block text-sm font-semibold">Invite-only</span>
+              <span className="block text-[10px] text-slate-500">Everyone needs the code</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetInviteRequired(false)}
+              disabled={!inviteConfigLoaded || savingInviteConfig || !inviteRequired}
+              className={`flex flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-center transition-all ${
+                !inviteRequired
+                  ? "border-amber-500/50 bg-amber-500/15 text-amber-300"
+                  : "border-cyan-900/20 bg-[#0a1628] text-slate-400 hover:border-amber-500/30 hover:text-slate-200"
+              }`}
+            >
+              <Unlock className="h-4 w-4" />
+              <span className="block text-sm font-semibold">Open registration</span>
+              <span className="block text-[10px] text-slate-500">No invite code needed</span>
+            </button>
+          </div>
+          {!inviteRequired && (
+            <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3.5 py-2.5">
+              <Unlock className="h-4 w-4 shrink-0 text-amber-400" />
+              <p className="text-xs text-amber-400">
+                Open registration is ON — anyone can create an account without the invite code.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {inviteConfigError && (
+          <div className="mb-4 rounded-xl border border-red-800/40 bg-red-950/30 p-3">
+            <p className="text-xs text-red-400">{inviteConfigError}</p>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 rounded-xl border border-lime-500/25 bg-lime-500/10 px-3.5 py-3">
           <KeyRound className="h-4 w-4 shrink-0 text-lime-400" />
@@ -612,15 +727,21 @@ export default function AdminPanelPage() {
         )}
 
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-lime-500/20 bg-lime-500/10 px-3.5 py-2.5">
-          <ShieldCheck className="h-4 w-4 shrink-0 text-lime-400" />
+          {inviteRequired ? (
+            <ShieldCheck className="h-4 w-4 shrink-0 text-lime-400" />
+          ) : (
+            <Unlock className="h-4 w-4 shrink-0 text-amber-400" />
+          )}
           <p className="text-xs text-lime-400">
-            Share this code with the people you want to invite. Users who already verified stay unlocked when you change it.
+            {inviteRequired
+              ? "Share this code with the people you want to invite. Users who already verified stay unlocked when you change it."
+              : "The saved code below isn't being enforced right now. Switching back to Invite-only makes it required again."}
           </p>
         </div>
       </div>
 
       {/* ── Ban users tool ── */}
-      <div className="mt-5 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up">
+      <div className="order-3 mt-5 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up md:order-none">
         <div className="mb-4 flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/15">
             <UserX className="h-4 w-4 text-red-400" />

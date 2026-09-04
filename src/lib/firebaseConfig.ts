@@ -161,6 +161,21 @@ export function userVerifiedRef(userId: string): DatabaseReference {
   return ref(db, `users/${userId}/verified`);
 }
 
+/**
+ * Reference to the public registration config node.
+ * Path: inviteConfig
+ *
+ * Anyone (even signed-out visitors on the login screen) can read this,
+ * but only the admin can write it (see database.rules.json).
+ *
+ * Shape: { required: boolean } — true = registration is invite-only
+ * (current default when the node is missing); false = anyone can
+ * register without entering an invite code.
+ */
+export function inviteConfigRef(): DatabaseReference {
+  return ref(db, "inviteConfig");
+}
+
 // ── User Settings ──────────────────────────────────────────
 
 /**

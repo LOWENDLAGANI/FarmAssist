@@ -31,9 +31,15 @@ const PRECACHE_URLS = [
 ];
 
 // ── Install: pre-cache critical static assets ────────────────
+// Per-URL add with allSettled so one missing asset (e.g. a 404 on
+// favicon) can never fail the whole install — a failed install leaves
+// the worker without an "active" state, which breaks FCM push
+// subscription ("no active Service Worker").
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS))
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) => Promise.allSettled(PRECACHE_URLS.map((u) => cache.add(u))))
   );
   self.skipWaiting();
 });

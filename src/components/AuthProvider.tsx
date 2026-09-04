@@ -6,11 +6,14 @@
  * Supports Google OAuth and Email/Password authentication.
  *
  * 🚪 INVITE-CODE GATE:
- * Registration is invite-only. Email/password accounts are created
- * server-side by the `registerWithInvite` callable (which validates the
- * single shared invite code before creating anything), and Google
- * accounts must verify the code through the unclosable `InviteCodeGate`
- * popup — until `users/{uid}/verified` is `true`, the app is blocked.
+ * Registration is invite-only unless the admin turns invite codes off
+ * (see `inviteConfig/required` — open registration). Email/password
+ * accounts are created server-side by the `registerWithInvite` callable
+ * (which validates the single shared invite code when required), and
+ * Google accounts must verify the code through the unclosable
+ * `InviteCodeGate` popup — until `users/{uid}/verified` is `true`, the
+ * app is blocked. When invites are off, that popup becomes a one-tap
+ * Continue that unlocks the account without a code.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -35,7 +38,13 @@ import {
 } from "firebase/auth";
 import { onValue } from "firebase/database";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { auth, app, userVerifiedRef, banRef } from "@/lib/firebaseConfig";
+import {
+  auth,
+  app,
+  userVerifiedRef,
+  inviteConfigRef,
+  banRef,
+} from "@/lib/firebaseConfig";
 import { ADMIN_UID } from "@/lib/adminConfig";
 import { parseBanRecord, isBanActive, type BanRecord } from "@/lib/bans";
 import InviteCodeGate from "./InviteCodeGate";
@@ -53,6 +62,12 @@ interface AuthContextValue {
    *  • null   — still checking (shown as a loading gate)
    */
   verified: boolean | null;
+  /**
+   * Whether registration currently requires the shared invite code
+   * (admin toggle, stored at `inviteConfig/required`). Defaults to
+   * true — invite-only — until the config is read.
+   */
+  inviteRequired: boolean;
   /** Sign in with Google popup. */
   signInWithGoogle: () => Promise<void>;
   /** Sign in with email and password. */
@@ -88,6 +103,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
   verified: null,
+  inviteRequired: true,
   signInWithGoogle: async () => {},
   signInWithEmail: async () => {},
   registerWithEmail: async () => {},
@@ -105,6 +121,8 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [verified, setVerified] = useState<boolean | null>(null);
+  // Whether new registrations need the shared invite code (admin toggle).
+  const [inviteRequired, setInviteRequired] = useState(true);
   // Active ban for the current user (null when not banned / not checked).
   const [ban, setBan] = useState<BanRecord | null>(null);
 
@@ -114,6 +132,25 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       setUser(firebaseUser);
       setLoading(false);
     });
+    return () => unsubscribe();
+  }, []);
+
+  // Track whether the admin has turned the invite-code requirement off
+  // (open registration). Public node, so it can be read even while the
+  // login screen is showing. Missing config = invite-only (default).
+  useEffect(() => {
+    const ref = inviteConfigRef();
+    const unsubscribe = onValue(
+      ref,
+      (snapshot) => {
+        const data = snapshot.val() as { required?: unknown } | null;
+        setInviteRequired(data?.required !== false);
+      },
+      (err) => {
+        console.error("[AuthProvider] Failed to read invite config:", err);
+        setInviteRequired(true);
+      }
+    );
     return () => unsubscribe();
   }, []);
 
@@ -214,6 +251,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         verified,
+        inviteRequired,
         signInWithGoogle,
         signInWithEmail,
         registerWithEmail,

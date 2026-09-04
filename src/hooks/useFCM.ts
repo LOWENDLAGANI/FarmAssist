@@ -100,17 +100,39 @@ export function useFCM(userId: string): FCMState {
 
           // Register the service worker if not already active.
           // Firebase getToken() requires an active SW to subscribe to push.
+          let swRegistration: ServiceWorkerRegistration | undefined;
           if ("serviceWorker" in navigator) {
-            const existingReg = await navigator.serviceWorker.getRegistration("/");
-            if (!existingReg) {
+            swRegistration = await navigator.serviceWorker.getRegistration("/");
+            if (!swRegistration) {
               console.log("[useFCM] Registering service worker...");
-              await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
-                scope: "/",
-              });
+              swRegistration = await navigator.serviceWorker.register(
+                "/firebase-messaging-sw.js",
+                { scope: "/" }
+              );
+            }
+
+            // register() resolves as soon as the worker is installed, but
+            // pushManager.subscribe() needs an ACTIVE worker. Waiting for
+            // navigator.serviceWorker.ready closes that race (the browser
+            // throws "no active Service Worker" otherwise).
+            if (!swRegistration.active) {
+              console.log("[useFCM] Waiting for service worker to activate...");
+              const activationTimeout = new Promise<never>((_, reject) =>
+                setTimeout(
+                  () => reject(new Error("Service worker activation timed out")),
+                  15000
+                )
+              );
+              await Promise.race([navigator.serviceWorker.ready, activationTimeout]);
             }
           }
 
-          const fcmToken = await getToken(messaging, { vapidKey });
+          const fcmToken = await getToken(
+            messaging,
+            swRegistration
+              ? { vapidKey, serviceWorkerRegistration: swRegistration }
+              : { vapidKey }
+          );
           console.log("[useFCM] FCM token obtained:", !!fcmToken);
 
           if (fcmToken) {

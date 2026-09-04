@@ -19,6 +19,10 @@
       ".read": "auth != null && auth.uid === 'tsYo3zKfr8SSowOE23lPQe8Kb0v2'",
       ".write": "auth != null && auth.uid === 'tsYo3zKfr8SSowOE23lPQe8Kb0v2'"
     },
+    "inviteConfig": {
+      ".read": true,
+      ".write": "auth != null && auth.uid === 'tsYo3zKfr8SSowOE23lPQe8Kb0v2'"
+    },
     "rover_registry": {
       "$deviceId": {
         ".read": "auth != null",

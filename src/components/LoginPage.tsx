@@ -90,7 +90,13 @@ function friendlyError(err: unknown): string {
 }
 
 export default function LoginPage() {
-  const { signInWithGoogle, signInWithEmail, registerWithEmail, sendPasswordReset } = useAuth();
+  const {
+    signInWithGoogle,
+    signInWithEmail,
+    registerWithEmail,
+    sendPasswordReset,
+    inviteRequired,
+  } = useAuth();
 
   const [view, setView] = useState<ViewMode>("signin");
   const [showEmailLogin, setShowEmailLogin] = useState(false);
@@ -175,14 +181,21 @@ export default function LoginPage() {
       setError("The passwords you entered don't match. Please try again.");
       return;
     }
-    if (!regInviteCode.trim()) {
+    // The invite code is only required while the admin has invite-only
+    // registration turned on.
+    if (inviteRequired && !regInviteCode.trim()) {
       setError("Please enter the invite code to register — FarmAssist is invite-only.");
       return;
     }
 
     setLoading(true);
     try {
-      await registerWithEmail(regEmail.trim(), regPassword, regName.trim(), regInviteCode.trim());
+      await registerWithEmail(
+        regEmail.trim(),
+        regPassword,
+        regName.trim(),
+        inviteRequired ? regInviteCode.trim() : ""
+      );
     } catch (err) {
       console.error("[LoginPage] Registration failed:", err);
       setError(friendlyError(err));
@@ -398,7 +411,9 @@ export default function LoginPage() {
                 </div>
                 <h2 className="text-lg font-bold text-white">Create Account</h2>
                 <p className="mt-1 text-xs text-lime-200/60">
-                  Invite-only: you need the invite code to register.
+                  {inviteRequired
+                    ? "Invite-only: you need the invite code to register."
+                    : "Registration is open — no invite code needed."}
                 </p>
               </div>
 
@@ -452,19 +467,21 @@ export default function LoginPage() {
                   />
                 </div>
 
-                <div className="relative">
-                  <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
-                  <input
-                    type="text"
-                    placeholder="Invite code (required)"
-                    value={regInviteCode}
-                    onChange={(e) => setRegInviteCode(e.target.value)}
-                    autoCapitalize="characters"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
-                  />
-                </div>
+                {inviteRequired && (
+                  <div className="relative">
+                    <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
+                    <input
+                      type="text"
+                      placeholder="Invite code (required)"
+                      value={regInviteCode}
+                      onChange={(e) => setRegInviteCode(e.target.value)}
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
+                    />
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -493,7 +510,9 @@ export default function LoginPage() {
                 Sign up with Google
               </button>
               <p className="mt-2 text-center text-[10px] text-lime-200/50">
-                New Google accounts must enter the invite code to unlock the app.
+                {inviteRequired
+                  ? "New Google accounts must enter the invite code to unlock the app."
+                  : "New Google accounts open instantly — no invite code needed."}
               </p>
 
               {/* Link to Sign In */}
