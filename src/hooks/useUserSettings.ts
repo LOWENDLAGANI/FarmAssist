@@ -11,6 +11,7 @@
  *  • customTheme      — custom theme color config
  *  • sidebarCollapsed — sidebar wide vs icon-rail preference
  *  • backgroundBlur   — dashboard background blur toggle
+ *  • roverMode        — 7\" rover-screen layout for touchscreens mounted on the rover
  *
  * Falls back to localStorage when not authenticated or as offline cache.
  * ─────────────────────────────────────────────────────────────────
@@ -32,6 +33,8 @@ export interface UserSettings {
   sidebarCollapsed: boolean;
   /** Whether the dashboard background is blurred (default ON). */
   backgroundBlur: boolean;
+  /** Optimized layout for a 7-inch touchscreen mounted on the rover. */
+  roverMode: boolean;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -47,6 +50,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   },
   sidebarCollapsed: false,
   backgroundBlur: true,
+  roverMode: false,
 };
 
 /** Check if the user is a guest (demo mode). */
@@ -74,8 +78,9 @@ function readLocalStorage(): UserSettings {
   const sidebarCollapsed = localStorage.getItem("agrovator-sidebar-collapsed") === "1";
   // Absent key = default ON
   const backgroundBlur = localStorage.getItem("agrovator-bg-blur") !== "0";
+  const roverMode = localStorage.getItem("farmassist-rover-mode") === "1";
 
-  return { deviceId, theme, customTheme, sidebarCollapsed, backgroundBlur };
+  return { deviceId, theme, customTheme, sidebarCollapsed, backgroundBlur, roverMode };
 }
 
 /** Write settings to localStorage. */
@@ -85,6 +90,7 @@ function writeLocalStorage(settings: UserSettings) {
   localStorage.setItem("farmassist-custom-theme", JSON.stringify(settings.customTheme));
   localStorage.setItem("agrovator-sidebar-collapsed", settings.sidebarCollapsed ? "1" : "0");
   localStorage.setItem("agrovator-bg-blur", settings.backgroundBlur ? "1" : "0");
+  localStorage.setItem("farmassist-rover-mode", settings.roverMode ? "1" : "0");
 }
 
 /**
@@ -123,6 +129,7 @@ export function useUserSettings(userId: string) {
               customTheme: data.customTheme ?? DEFAULT_SETTINGS.customTheme,
               sidebarCollapsed: data.sidebarCollapsed ?? DEFAULT_SETTINGS.sidebarCollapsed,
               backgroundBlur: data.backgroundBlur ?? DEFAULT_SETTINGS.backgroundBlur,
+              roverMode: data.roverMode ?? DEFAULT_SETTINGS.roverMode,
             };
 
             setSettings(synced);
@@ -169,6 +176,7 @@ export function useUserSettings(userId: string) {
             customTheme: merged.customTheme,
             sidebarCollapsed: merged.sidebarCollapsed,
             backgroundBlur: merged.backgroundBlur,
+            roverMode: merged.roverMode,
           }).catch((err) => {
             console.error("[useUserSettings] Firebase write error:", err);
           });
@@ -194,6 +202,7 @@ export function useUserSettings(userId: string) {
             customTheme: merged.customTheme,
             sidebarCollapsed: merged.sidebarCollapsed,
             backgroundBlur: merged.backgroundBlur,
+            roverMode: merged.roverMode,
           }).catch((err) => {
             console.error("[useUserSettings] Firebase write error:", err);
           });

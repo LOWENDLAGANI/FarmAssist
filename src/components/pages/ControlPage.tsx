@@ -27,7 +27,6 @@ import {
   Check,
   X,
   Sun,
-  Camera,
   Loader2,
   AlertCircle,
   Clock,
@@ -128,18 +127,6 @@ const CONTROL_ACTIONS: ControlAction[] = [
     confirmTitle: "Enable Manual Override?",
     confirmMessage:
       "This will disable all automatic routines and give you direct control over the rover. Automated schedules will be paused.",
-  },
-  {
-    id: "camera_calibrate",
-    label: "Calibrate Camera",
-    description: "Run auto-focus and white balance calibration on the rover camera",
-    icon: Camera,
-    color: "text-pink-400",
-    bgColor: "bg-pink-500/15",
-    borderColor: "border-pink-500/30",
-    confirmTitle: "Calibrate Camera?",
-    confirmMessage:
-      "This will run an automatic calibration sequence on the rover camera including focus, exposure, and white balance. The rover must be stationary.",
   },
   {
     id: "spray",

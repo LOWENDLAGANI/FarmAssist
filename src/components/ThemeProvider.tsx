@@ -36,6 +36,9 @@ interface ThemeContextValue {
   /** Synced dashboard background blur preference (default ON). */
   backgroundBlur: boolean;
   setBackgroundBlurred: (blurred: boolean) => void;
+  /** Optimized 7-inch rover screen layout (default OFF). */
+  roverMode: boolean;
+  setRoverMode: (rover: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
@@ -59,6 +62,8 @@ const ThemeContext = createContext<ThemeContextValue>({
   setSidebarCollapsed: () => {},
   backgroundBlur: true,
   setBackgroundBlurred: () => {},
+  roverMode: false,
+  setRoverMode: () => {},
 });
 
 export function useAppTheme() {
@@ -139,6 +144,11 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
     saveSetting("backgroundBlur", blurred);
   };
 
+  // ── Rover screen mode (synced via useUserSettings) ────────
+  const setRoverMode = (rover: boolean) => {
+    saveSetting("roverMode", rover);
+  };
+
   return (
     <ThemeContext.Provider value={{
       theme: activeTheme,
@@ -154,6 +164,8 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
       setSidebarCollapsed,
       backgroundBlur: settings.backgroundBlur,
       setBackgroundBlurred,
+      roverMode: settings.roverMode,
+      setRoverMode,
     }}>
       {children}
     </ThemeContext.Provider>

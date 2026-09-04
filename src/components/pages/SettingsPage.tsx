@@ -37,6 +37,7 @@ import {
   Archive,
   MessageSquare,
   CircleUserRound,
+  MonitorSmartphone,
 } from "lucide-react";
 import { isSoundEnabled, setSoundEnabled, isHapticEnabled, setHapticEnabled } from "@/lib/notificationSound";
 import { getNotificationPrefs, setNotificationPref, isNotificationEnabled, type AlertSeverity } from "@/lib/notificationPreferences";
@@ -103,7 +104,7 @@ export default function SettingsPage({
   onBackgroundBlurChange,
   onOpenAccountSettings,
 }: SettingsPageProps) {
-  const { theme, setTheme, themes, customTheme, setCustomTheme, applyCustomTheme } = useAppTheme();
+  const { theme, setTheme, themes, customTheme, setCustomTheme, applyCustomTheme, roverMode, setRoverMode } = useAppTheme();
   const { registerDevice, unlinkDevice, status: deviceLinkStatus, registryInfo } = useDeviceValidation(userUID, deviceId);
   const [deviceInput, setDeviceInput] = useState(deviceId);
   const [saved, setSaved] = useState(false);
@@ -295,6 +296,50 @@ export default function SettingsPage({
             linkStatus={deviceLinkStatus}
             registryInfo={registryInfo}
           />
+        </div>
+
+        {/* Rover Screen Mode (7-inch optimized layout) */}
+        <div className="rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up stagger-2">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/15">
+              <MonitorSmartphone className="h-4 w-4 text-cyan-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold text-white">Rover Screen Mode</h3>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Optimized for the 7-inch touchscreen mounted on the Rover.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-white">Enable rover screen</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                Compact live readings, big tap targets, and neatly organized navigation so everything fits on a small display.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={roverMode}
+              aria-label="Enable Rover Screen Mode"
+              onClick={() => setRoverMode(!roverMode)}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${
+                roverMode ? "bg-cyan-500" : "bg-slate-700"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all duration-200 ${
+                  roverMode ? "left-[1.375rem]" : "left-0.5"
+                }`}
+              />
+            </button>
+          </div>
+          {roverMode && (
+            <p className="mt-2 text-[11px] text-emerald-400">
+              Rover Screen Mode is ON — the dashboard is now laid out for the 7-inch rover display. Turn it off here to go back to the normal layout.
+            </p>
+          )}
         </div>
 
         {/* Account sign-in settings */}
