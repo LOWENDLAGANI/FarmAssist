@@ -15,9 +15,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getToken, onMessage, type Messaging, type MessagePayload } from "firebase/messaging";
+import type { Messaging, MessagePayload } from "firebase/messaging";
 import { set } from "firebase/database";
-import { messaging, fcmTokenRef } from "@/lib/firebaseConfig";
+import { getMessagingInstance, fcmTokenRef } from "@/lib/firebaseConfig";
 
 /** FCM service worker URL + scope (must match public/firebase-messaging-sw.js). */
 const SW_URL = "/firebase-messaging-sw.js";
@@ -76,6 +76,7 @@ async function fetchFcmTokenWithRetry(
   const MAX_ATTEMPTS = 3;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
+      const { getToken } = await import("firebase/messaging");
       const swRegistration = await ensureActiveServiceWorker();
       const token = await getToken(messagingInstance, {
         vapidKey,
@@ -110,7 +111,7 @@ export interface FCMState {
   requestPermission: (userId: string) => Promise<void>;
 }
 
-export function useFCM(userId: string): FCMState {
+export function useFCM(userId: string, enabled = true): FCMState {
   const [isSupported, setIsSupported] = useState(false);
   const [permission, setPermissionState] =
     useState<NotificationPermission>("default");
@@ -121,45 +122,67 @@ export function useFCM(userId: string): FCMState {
 
   // ── Check support on mount ─────────────────────────────────
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const supported = "Notification" in window && !!messaging;
-    setIsSupported(supported);
-    if (supported) {
-      setPermissionState(Notification.permission);
-    }
-  }, []);
+    if (typeof window === "undefined" || !enabled) return;
+    let cancelled = false;
+    (async () => {
+      const messaging = await getMessagingInstance();
+      if (cancelled) return;
+      const supported = "Notification" in window && !!messaging;
+      setIsSupported(supported);
+      if (supported) {
+        setPermissionState(Notification.permission);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
 
   // ── Listen for foreground messages ─────────────────────────
   useEffect(() => {
-    if (!messaging) return;
+    if (!enabled) return;
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    (async () => {
+      const messaging = await getMessagingInstance();
+      if (!messaging || cancelled) return;
+      const { onMessage } = await import("firebase/messaging");
+      if (cancelled) return;
 
-    const unsubscribe = onMessage(messaging, (payload) => {
-      setLastMessage(payload);
+      unsubscribe = onMessage(messaging, (payload) => {
+        setLastMessage(payload);
 
-      // Show a browser notification even when the tab is focused
-      if (Notification.permission === "granted") {
-        const { title, body } = payload.notification ?? {};
-        if (title) {
-          new Notification(title, {
-            body: body ?? "",
-            icon: "/favicon.ico",
-            tag: payload.data?.deviceId as string | undefined,
-          });
+        // Show a browser notification even when the tab is focused
+        if (Notification.permission === "granted") {
+          const { title, body } = payload.notification ?? {};
+          if (title) {
+            new Notification(title, {
+              body: body ?? "",
+              icon: "/favicon.ico",
+              tag: payload.data?.deviceId as string | undefined,
+            });
+          }
         }
-      }
-    });
+      });
+    })();
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [enabled]);
 
   // ── Request permission and store token ─────────────────────
   const requestPermission = useCallback(
     async (uid: string) => {
-      if (!uid || !messaging) return;
+      if (!enabled || !uid) return;
       setIsLoading(true);
 
       try {
         console.log("[useFCM] Requesting notification permission...");
+        const messaging = await getMessagingInstance();
+        if (!messaging) return;
+        const { getToken } = await import("firebase/messaging");
         const result = await Notification.requestPermission();
         console.log("[useFCM] Permission result:", result);
         setPermissionState(result);
@@ -198,7 +221,7 @@ export function useFCM(userId: string): FCMState {
         setIsLoading(false);
       }
     },
-    []
+    [enabled]
   );
 
   return {

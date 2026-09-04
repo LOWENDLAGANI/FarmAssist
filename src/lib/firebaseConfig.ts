@@ -21,7 +21,7 @@ import {
   type DatabaseReference,
 } from "firebase/database";
 import { getAuth, type Auth } from "firebase/auth";
-import { getMessaging, type Messaging } from "firebase/messaging";
+import type { Messaging } from "firebase/messaging";
 
 // ── Firebase configuration ────────────────────────────────────────
 const firebaseConfig = {
@@ -310,15 +310,24 @@ export function banRef(userId: string): DatabaseReference {
 }
 
 /**
- * Firebase Cloud Messaging instance (browser only).
- * Returns null on the server or if messaging is unsupported.
+ * Firebase Cloud Messaging instance — lazily created on first use so the
+ * `firebase/messaging` module is never loaded on startup (rover screen
+ * in particular doesn't need push notifications). Returns null on the
+ * server or if messaging is unsupported.
  */
-let _messaging: Messaging | null = null;
-try {
-  if (typeof window !== "undefined") {
-    _messaging = getMessaging(app);
+let _messagingPromise: Promise<Messaging | null> | null = null;
+export function getMessagingInstance(): Promise<Messaging | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  if (!_messagingPromise) {
+    _messagingPromise = (async () => {
+      try {
+        const { getMessaging } = await import("firebase/messaging");
+        return getMessaging(app);
+      } catch {
+        // Messaging not available (unsupported browser, etc.)
+        return null;
+      }
+    })();
   }
-} catch {
-  // Messaging not available (SSR or unsupported browser)
+  return _messagingPromise;
 }
-export const messaging: Messaging | null = _messaging;

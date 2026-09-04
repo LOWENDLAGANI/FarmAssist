@@ -14,6 +14,7 @@
 
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "./AuthProvider";
 import { useTelemetry } from "@/hooks/useTelemetry";
@@ -36,27 +37,32 @@ import { useBroadcasts } from "@/hooks/useBroadcast";
 import { isAdminUser } from "@/lib/adminConfig";
 import { isOnboardingDone } from "./OnboardingWizard";
 import { alertUser } from "@/lib/notificationSound";
-import Sidebar from "./Sidebar";
-import TopBar from "./TopBar";
-import BottomNav from "./BottomNav";
 import ErrorBoundary from "./ErrorBoundary";
-import SensorCard from "./SensorCard";
-import ChartSection from "./ChartSection";
-import FullScreenChart from "./FullScreenChart";
-import RecommendationPanel from "./RecommendationPanel";
-import WelcomeBanner from "./WelcomeBanner";
 import BroadcastBanner from "./BroadcastBanner";
 import BroadcastModal from "./BroadcastModal";
-import WeatherWidget from "./WeatherWidget";
 import OnboardingWizard from "./OnboardingWizard";
 import ChangelogModal from "./ChangelogModal";
 import LocationPrompt from "./LocationPrompt";
-import QuickActionFAB from "./QuickActionFAB";
 import ErrorDialog from "./ErrorDialog";
 import DeviceMismatchBanner from "./DeviceMismatchBanner";
 import OwnershipDeniedOverlay from "./OwnershipDeniedOverlay";
-import PwaInstallBanner from "./PwaInstallBanner";
 import RoverScreen, { RoverHome } from "./RoverScreen";
+
+// ── Lazy-loaded chunks (kept out of the initial bundle) ────────────
+// Rover screen mode never renders these, so a mounted display (e.g. a
+// Raspberry Pi) never has to download or parse them. Each one loads
+// on demand the first time it's actually used.
+const Sidebar = dynamic(() => import("./Sidebar"), { ssr: false });
+const TopBar = dynamic(() => import("./TopBar"), { ssr: false });
+const BottomNav = dynamic(() => import("./BottomNav"), { ssr: false });
+const SensorCard = dynamic(() => import("./SensorCard"), { ssr: false });
+const ChartSection = dynamic(() => import("./ChartSection"), { ssr: false });
+const FullScreenChart = dynamic(() => import("./FullScreenChart"), { ssr: false });
+const RecommendationPanel = dynamic(() => import("./RecommendationPanel"), { ssr: false });
+const WelcomeBanner = dynamic(() => import("./WelcomeBanner"), { ssr: false });
+const WeatherWidget = dynamic(() => import("./WeatherWidget"), { ssr: false });
+const QuickActionFAB = dynamic(() => import("./QuickActionFAB"), { ssr: false });
+const PwaInstallBanner = dynamic(() => import("./PwaInstallBanner"), { ssr: false });
 import NotificationsPage from "./pages/NotificationsPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -199,7 +205,9 @@ export default function Dashboard() {
     markAllRead,
   } = useNotifications(userId);
 
-  const { requestPermission } = useFCM(userId);
+  // Push notifications are skipped on the rover screen — a mounted display
+  // doesn't need them, and it keeps `firebase/messaging` out of the load path.
+  const { requestPermission } = useFCM(userId, !roverMode);
 
   // Detect critical events and write notifications
   useCriticalAlerts({
@@ -211,13 +219,13 @@ export default function Dashboard() {
     createNotification,
   });
 
-  // ── Auto-request FCM permission on mount ───────────────────
+  // ── Auto-request FCM permission on mount (not on the rover screen) ──
   const fcmRequestedRef = useRef(false);
   useEffect(() => {
-    if (!userId || fcmRequestedRef.current) return;
+    if (!userId || roverMode || fcmRequestedRef.current) return;
     fcmRequestedRef.current = true;
     requestPermission(userId);
-  }, [userId, requestPermission]);
+  }, [userId, roverMode, requestPermission]);
 
   // ── Error dialog state ─────────────────────────────────────
   const [showError, setShowError] = useState(false);
@@ -338,8 +346,8 @@ export default function Dashboard() {
    */
   const renderPageSections = () => (
     <ErrorBoundary>
-      {/* PWA Install Prompt */}
-      <PwaInstallBanner />
+      {/* PWA Install Prompt (rover screen is a kiosk — skip it) */}
+      {!roverMode && <PwaInstallBanner />}
 
       {/* Admin broadcast banners (stacked) */}
       {broadcasts.map((b) =>
@@ -626,13 +634,15 @@ export default function Dashboard() {
         <BroadcastModal broadcast={latestBroadcast} />
       )}
 
-      {/* ── Full-Screen Chart Modal ── */}
-      <FullScreenChart
-        isOpen={fullScreenChartOpen}
-        onClose={() => setFullScreenChartOpen(false)}
-        initialSensor={activeSensor}
-        history={chartHistory}
-      />
+      {/* ── Full-Screen Chart Modal (lazy — only loads when opened) ── */}
+      {fullScreenChartOpen && (
+        <FullScreenChart
+          isOpen={fullScreenChartOpen}
+          onClose={() => setFullScreenChartOpen(false)}
+          initialSensor={activeSensor}
+          history={chartHistory}
+        />
+      )}
 
       {/* ── Quick Action FAB (mobile only) ── */}
       {!roverMode && isMobile && activePage === "dashboard" && (

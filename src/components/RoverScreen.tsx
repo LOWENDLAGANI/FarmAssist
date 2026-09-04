@@ -91,7 +91,7 @@ function RoverNavRail({ activePage, onNavigate, settingsAlert, unreadCount }: Ro
   return (
     <aside
       aria-label="Rover navigation"
-      className="hidden w-[88px] shrink-0 flex-col gap-1.5 overflow-y-auto border-r border-cyan-900/20 bg-[#0a1628]/90 p-2 backdrop-blur md:flex"
+      className="hidden w-[88px] shrink-0 flex-col gap-1.5 overflow-y-auto border-r border-cyan-900/20 bg-[#0a1628] p-2 md:flex"
     >
       {ROVER_NAV.map((item) => {
         const isActive = activePage === item.id;
@@ -125,7 +125,7 @@ function RoverBottomNav({ activePage, onNavigate, settingsAlert, unreadCount }: 
   return (
     <nav
       aria-label="Rover navigation"
-      className="flex h-[calc(4.25rem+env(safe-area-inset-bottom))] shrink-0 items-center justify-around border-t border-cyan-900/20 bg-[#0a1628]/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      className="flex h-[calc(4.25rem+env(safe-area-inset-bottom))] shrink-0 items-center justify-around border-t border-cyan-900/20 bg-[#0a1628] px-1 pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {ROVER_NAV.map((item) => {
         const isActive = activePage === item.id;
@@ -166,7 +166,7 @@ function RoverTopBar({
   const isStale = status === "stale";
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-cyan-900/20 bg-[#0a1628]/95 px-3 backdrop-blur sm:px-4">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-cyan-900/20 bg-[#0a1628] px-3 sm:px-4">
       <div className="flex min-w-0 items-center gap-2.5">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/15">
           <MonitorSmartphone className="h-5 w-5 text-cyan-400" />

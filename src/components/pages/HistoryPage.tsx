@@ -16,6 +16,7 @@
 
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Play,
@@ -36,7 +37,10 @@ import {
 import type { LoggingSession, SessionDataPoint } from "@/hooks/useLoggingSession";
 import type { SensorKey, ChartDataPoint } from "@/types/telemetry";
 import { SENSOR_META } from "@/types/telemetry";
-import ChartSection from "../ChartSection";
+
+// Lazy — pulls Recharts out of the initial bundle (large; only needed
+// when a session's data is actually viewed).
+const ChartSection = dynamic(() => import("../ChartSection"), { ssr: false });
 
 interface HistoryPageProps {
   sessions: LoggingSession[];
