@@ -4,12 +4,20 @@
       "$uid": {
         ".read": "auth != null",
         ".write": "auth != null",
+        ".validate": "!newData.hasChild('verified') || (data.hasChild('verified') && newData.child('verified').val() === data.child('verified').val())",
+        "verified": {
+          ".write": false
+        },
         "notifications": {
           "$notifId": {
             ".validate": "newData.hasChildren(['type', 'title', 'body', 'deviceId', 'createdAt', 'read'])"
           }
         }
       }
+    },
+    "inviteCode": {
+      ".read": "auth != null && auth.uid === 'tsYo3zKfr8SSowOE23lPQe8Kb0v2'",
+      ".write": "auth != null && auth.uid === 'tsYo3zKfr8SSowOE23lPQe8Kb0v2'"
     },
     "rover_registry": {
       "$deviceId": {

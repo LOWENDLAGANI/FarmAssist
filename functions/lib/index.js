@@ -8,7 +8,6 @@
  * Functions:
  *  • askAssistant   — callable; Gemini-powered in-app help assistant
  *  • onSensorAlert  — triggers on telemetry write, checks thresholds
- *  • onForcePair    — triggers on rover_registry update
  * ─────────────────────────────────────────────────────────────────
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -45,8 +44,9 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onRoverOffline = exports.sendSms = exports.askAssistant = exports.onForcePair = exports.onSensorAlert = void 0;
+exports.onRoverOffline = exports.sendSms = exports.askAssistant = exports.onSensorAlert = exports.verifyInviteCode = exports.registerWithInvite = void 0;
 const app_1 = require("firebase-admin/app");
+const auth_1 = require("firebase-admin/auth");
 const database_1 = require("firebase-admin/database");
 const messaging_1 = require("firebase-admin/messaging");
 const v2_1 = require("firebase-functions/v2");
@@ -63,6 +63,116 @@ const messaging = (0, messaging_1.getMessaging)();
 const ALERT_COOLDOWN_MS = 10 * 60 * 1000;
 const SMS_COOLDOWN_MS = 30 * 60 * 1000; // 30 min cooldown for SMS
 const OWNER_UID = "tsYo3zKfr8SSowOE23lPQe8Kb0v2";
+// ── Invite-code registration ────────────────────────────────────
+// Every new account must be unlocked with the single shared invite
+// code stored in the database at `inviteCode/code`.
+//
+//   • Email/password accounts are ONLY created server-side by
+//     `registerWithInvite`, which refuses to create the account when
+//     the code is missing or wrong.
+//   • Google accounts are created by Google first (unavoidable), then
+//     the app shows an unclosable popup that calls `verifyInviteCode`.
+//     Until it succeeds, `users/{uid}/verified` stays unverified and
+//     the popup keeps blocking the app.
+//   • `blockDirectSignup` rejects client-side email/password signup so
+//     nobody can bypass the invite code. (Admin SDK user creation does
+//     NOT trigger blocking functions, which is why the callable path
+//     still works.)
+/** Normalize an invite code for comparison: trim + case-insensitive. */
+function normalizeCode(raw) {
+    return raw.trim().toLowerCase();
+}
+/** Read the single shared invite code from the database. */
+async function getInviteCode() {
+    const snap = await db.ref("inviteCode/code").get();
+    const code = snap.val();
+    return typeof code === "string" && code.trim() ? code : null;
+}
+/**
+ * Callable: creates an email/password account ONLY when the invite
+ * code is valid. The account is created with the Admin SDK and marked
+ * verified immediately — no account is created when the code is wrong.
+ *
+ * (A beforeUserCreated blocking function would also block raw client
+ * SDK signups, but it requires the project to be upgraded to Identity
+ * Platform — GCIP — which this project doesn't use. Without it, anyone
+ * who creates an account directly still gets locked behind the invite
+ * popup because users/{uid}/verified is only settable by the server.)
+ */
+exports.registerWithInvite = (0, https_1.onCall)({}, async (request) => {
+    var _a, _b, _c;
+    const { email, password, displayName, inviteCode } = ((_a = request.data) !== null && _a !== void 0 ? _a : {});
+    const cleanEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    const cleanPassword = typeof password === "string" ? password : "";
+    const cleanName = typeof displayName === "string" ? displayName.trim() : "";
+    const cleanCode = typeof inviteCode === "string" ? inviteCode : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        throw new https_1.HttpsError("invalid-argument", "Please enter a valid email address.");
+    }
+    if (cleanPassword.length < 6) {
+        throw new https_1.HttpsError("invalid-argument", "Your password needs at least 6 characters.");
+    }
+    if (!cleanName || cleanName.length > 60) {
+        throw new https_1.HttpsError("invalid-argument", "Please enter your name.");
+    }
+    if (!cleanCode) {
+        throw new https_1.HttpsError("invalid-argument", "An invite code is required to register.");
+    }
+    const storedCode = await getInviteCode();
+    if (!storedCode) {
+        throw new https_1.HttpsError("failed-precondition", "Invite registration isn't configured yet. Ask the owner to set an invite code.");
+    }
+    if (normalizeCode(cleanCode) !== normalizeCode(storedCode)) {
+        throw new https_1.HttpsError("invalid-argument", "That invite code isn't valid. Registration is invite-only — ask the owner for the code.");
+    }
+    let uid;
+    try {
+        const user = await (0, auth_1.getAuth)().createUser({
+            email: cleanEmail,
+            password: cleanPassword,
+            displayName: cleanName,
+        });
+        uid = user.uid;
+    }
+    catch (err) {
+        logger.error("registerWithInvite createUser failed:", (_c = (_b = err === null || err === void 0 ? void 0 : err.code) !== null && _b !== void 0 ? _b : err === null || err === void 0 ? void 0 : err.message) !== null && _c !== void 0 ? _c : err);
+        if ((err === null || err === void 0 ? void 0 : err.code) === "auth/email-already-exists") {
+            throw new https_1.HttpsError("already-exists", "An account with this email already exists.");
+        }
+        throw new https_1.HttpsError("internal", "Could not create your account right now. Please try again.");
+    }
+    // Unlock the app for this account (server-side only write).
+    await db.ref(`users/${uid}/verified`).set(true);
+    logger.info(`New invite-registered user: ${uid} (${cleanEmail})`);
+    return { uid };
+});
+/**
+ * Callable: verifies the invite code for an already-existing account
+ * (used by the Google sign-up popup). The code is checked against the
+ * single stored code; `users/{uid}/verified` is only written when the
+ * code is correct. Wrong codes leave the account unverified.
+ */
+exports.verifyInviteCode = (0, https_1.onCall)({}, async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Sign in to verify your invite code.");
+    }
+    const uid = request.auth.uid;
+    const { inviteCode } = ((_a = request.data) !== null && _a !== void 0 ? _a : {});
+    const cleanCode = typeof inviteCode === "string" ? inviteCode : "";
+    if (!cleanCode) {
+        throw new https_1.HttpsError("invalid-argument", "Enter your invite code to continue.");
+    }
+    const storedCode = await getInviteCode();
+    if (!storedCode) {
+        throw new https_1.HttpsError("failed-precondition", "No invite code is set yet. Ask the owner to set one.");
+    }
+    if (normalizeCode(cleanCode) !== normalizeCode(storedCode)) {
+        throw new https_1.HttpsError("permission-denied", "That invite code isn't correct. Ask the owner for the current code and try again.");
+    }
+    await db.ref(`users/${uid}/verified`).set(true);
+    return { verified: true };
+});
 // Lazy-load cached system prompt to prevent top-level initialization timeouts
 let cachedSystemPrompt = null;
 function getSystemPrompt() {
@@ -153,55 +263,6 @@ exports.onSensorAlert = (0, database_2.onValueWritten)("/users/{uid}/devices/{de
         }
         else {
             logger.error("Push send failed:", err);
-        }
-    }
-});
-// ── Force-pair alert ────────────────────────────────────────────
-exports.onForcePair = (0, database_2.onValueUpdated)("/rover_registry/{deviceId}", async (event) => {
-    const deviceId = event.params.deviceId;
-    const before = event.data.before.val();
-    const after = event.data.after.val();
-    if (!before || !after)
-        return;
-    if (before.ownerUid === after.ownerUid)
-        return;
-    if (!before.ownerUid)
-        return;
-    const prevOwnerUid = before.ownerUid;
-    if (before.paired === false && after.paired === true)
-        return;
-    const tokenSnap = await db
-        .ref(`users/${prevOwnerUid}/fcmToken`)
-        .get();
-    const tokenData = tokenSnap.val();
-    if (!(tokenData === null || tokenData === void 0 ? void 0 : tokenData.token))
-        return;
-    try {
-        await messaging.send({
-            token: tokenData.token,
-            notification: {
-                title: `Rover Claimed — ${deviceId}`,
-                body: `Your Rover "${deviceId}" was claimed by another account.`,
-            },
-            data: { deviceId, type: "force_pair" },
-            webpush: {
-                fcmOptions: { link: "/settings" },
-                notification: {
-                    icon: "/favicon.ico",
-                    tag: `force_pair_${deviceId}`,
-                    renotify: true,
-                },
-            },
-        });
-        logger.info(`Force-pair push sent to ${prevOwnerUid}`);
-    }
-    catch (err) {
-        if (err.code === "messaging/registration-token-not-registered" ||
-            err.code === "messaging/invalid-registration-token") {
-            await db.ref(`users/${prevOwnerUid}/fcmToken`).remove();
-        }
-        else {
-            logger.error("Force-pair push failed:", err);
         }
     }
 });

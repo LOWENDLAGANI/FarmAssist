@@ -42,8 +42,23 @@ const DECOR_LEAVES = [
 
 type ViewMode = "signin" | "register" | "forgot";
 
-/** Friendly error messages for Firebase auth error codes */
-function friendlyError(code?: string): string {
+/** Friendly error messages for Firebase auth / callable error codes */
+function friendlyError(err: unknown): string {
+  const code =
+    err instanceof Error ? (err as { code?: string }).code : undefined;
+
+  // Errors thrown by the Cloud Functions carry the server's message.
+  if (code?.startsWith("functions/")) {
+    const message = err instanceof Error ? err.message : "";
+    // httpsCallable can prefix the message with the error code
+    // (e.g. "invalid-argument, ..." or "internal(0), ...").
+    const stripped = message.match(/^[a-z-]+(?:\(\d*\))?\s*,\s*(.*)$/);
+    return (
+      (stripped ? stripped[1] : message) ||
+      "Something went wrong. Please try again in a moment."
+    );
+  }
+
   switch (code) {
     case "auth/invalid-credential":
     case "auth/wrong-password":
@@ -89,6 +104,7 @@ export default function LoginPage() {
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regConfirm, setRegConfirm] = useState("");
+  const [regInviteCode, setRegInviteCode] = useState("");
 
   // ── Forgot password fields ──
   const [resetEmail, setResetEmail] = useState("");
@@ -113,7 +129,7 @@ export default function LoginPage() {
       await signInWithGoogle();
     } catch (err) {
       console.error("[LoginPage] Google sign-in failed:", err);
-      setError(friendlyError(err instanceof Error ? (err as { code?: string }).code : undefined));
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -132,7 +148,7 @@ export default function LoginPage() {
       await signInWithEmail(signInEmail.trim(), signInPassword);
     } catch (err) {
       console.error("[LoginPage] Email sign-in failed:", err);
-      setError(friendlyError(err instanceof Error ? (err as { code?: string }).code : undefined));
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -159,13 +175,17 @@ export default function LoginPage() {
       setError("The passwords you entered don't match. Please try again.");
       return;
     }
+    if (!regInviteCode.trim()) {
+      setError("Please enter the invite code to register — FarmAssist is invite-only.");
+      return;
+    }
 
     setLoading(true);
     try {
-      await registerWithEmail(regEmail.trim(), regPassword, regName.trim());
+      await registerWithEmail(regEmail.trim(), regPassword, regName.trim(), regInviteCode.trim());
     } catch (err) {
       console.error("[LoginPage] Registration failed:", err);
-      setError(friendlyError(err instanceof Error ? (err as { code?: string }).code : undefined));
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -185,7 +205,7 @@ export default function LoginPage() {
       setResetSent(true);
     } catch (err) {
       console.error("[LoginPage] Password reset failed:", err);
-      setError(friendlyError(err instanceof Error ? (err as { code?: string }).code : undefined));
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -378,7 +398,7 @@ export default function LoginPage() {
                 </div>
                 <h2 className="text-lg font-bold text-white">Create Account</h2>
                 <p className="mt-1 text-xs text-lime-200/60">
-                  Set up your FarmAssist dashboard in seconds.
+                  Invite-only: you need the invite code to register.
                 </p>
               </div>
 
@@ -432,6 +452,20 @@ export default function LoginPage() {
                   />
                 </div>
 
+                <div className="relative">
+                  <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-lime-400/50" />
+                  <input
+                    type="text"
+                    placeholder="Invite code (required)"
+                    value={regInviteCode}
+                    onChange={(e) => setRegInviteCode(e.target.value)}
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="w-full rounded-xl border border-lime-500/25 bg-lime-500/10 py-3 pl-10 pr-4 text-sm text-white placeholder:text-lime-200/40 transition-all focus:border-lime-400/50 focus:bg-lime-500/15 focus:outline-none focus:ring-1 focus:ring-lime-400/30"
+                  />
+                </div>
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -458,6 +492,9 @@ export default function LoginPage() {
                 <GoogleIcon className="h-5 w-5" />
                 Sign up with Google
               </button>
+              <p className="mt-2 text-center text-[10px] text-lime-200/50">
+                New Google accounts must enter the invite code to unlock the app.
+              </p>
 
               {/* Link to Sign In */}
               <p className="mt-5 text-center text-xs text-lime-200/50">

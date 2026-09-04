@@ -429,12 +429,13 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
 
     try {
       const newRef = push(commandsRef(userId, deviceId));
-      await set(newRef, {
-        action: action.id,
-        timestamp: Date.now(),
-        status: "pending",
-        parameters: Object.keys(pendingParams).length > 0 ? Object.fromEntries(Object.entries(pendingParams).filter(([, v]) => v !== undefined && v !== "")) : undefined,
-      });
+    await set(newRef, {
+      action: action.id,
+      timestamp: Date.now(),
+      status: "pending",
+      parameters: action.parameters ?? null 
+});
+
 
       setResultStatus("success");
       setResultError(undefined);

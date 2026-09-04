@@ -14,8 +14,8 @@
 
 "use client";
 
-import { useState } from "react";
-import { push, update } from "firebase/database";
+import { useState, useEffect } from "react";
+import { push, update, set, onValue, off, type DataSnapshot } from "firebase/database";
 import {
   Megaphone,
   Send,
@@ -24,6 +24,8 @@ import {
   Check,
   ShieldAlert,
   ShieldCheck,
+  KeyRound,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "../AuthProvider";
 import {
@@ -31,7 +33,7 @@ import {
   type BroadcastMode,
   type BroadcastAudience,
 } from "@/hooks/useBroadcast";
-import { broadcastsRef, broadcastRef } from "@/lib/firebaseConfig";
+import { broadcastsRef, broadcastRef, inviteCodeRef } from "@/lib/firebaseConfig";
 import { ADMIN_UID } from "@/lib/adminConfig";
 
 const BROADCAST_MODES: Array<{ id: BroadcastMode; label: string; description: string }> = [
@@ -56,6 +58,66 @@ export default function AdminPanelPage() {
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
   const [broadcastSent, setBroadcastSent] = useState(false);
   const [stoppingBroadcast, setStoppingBroadcast] = useState<string | null>(null);
+
+  // ── Invite code state ──
+  const [currentInviteCode, setCurrentInviteCode] = useState<string | null>(null);
+  const [inviteCodeDraft, setInviteCodeDraft] = useState("");
+  const [savingInviteCode, setSavingInviteCode] = useState(false);
+  const [inviteCodeSaved, setInviteCodeSaved] = useState(false);
+  const [inviteCodeError, setInviteCodeError] = useState<string | null>(null);
+
+  // Listen for the current invite code (admin-only read rule).
+  useEffect(() => {
+    const ref = inviteCodeRef();
+    const handle = onValue(ref, (snap: DataSnapshot) => {
+      const data = snap.val();
+      const code = data?.code;
+      setCurrentInviteCode(typeof code === "string" && code.trim() ? code : null);
+      setInviteCodeDraft(typeof code === "string" && code.trim() ? code : "");
+    }, (err) => {
+      // Read denied — almost always means the new database rules were not deployed yet.
+      console.error("[AdminPanel] Failed to read invite code:", err);
+      setInviteCodeError(
+        "Couldn't load the invite code — this usually means the updated database rules haven't been deployed yet (firebase deploy --only database)."
+      );
+    });
+    return () => off(ref, "value", handle);
+  }, []);
+
+  /** Random, easy-to-share code like FARM-8K2M9Q. */
+  const generateInviteCode = () => {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
+    const chars = new Uint32Array(6);
+    crypto.getRandomValues(chars);
+    let code = "";
+    for (const n of chars) code += alphabet[n % alphabet.length];
+    setInviteCodeDraft(`FARM-${code}`);
+    setInviteCodeSaved(false);
+    setInviteCodeError(null);
+  };
+
+  const handleSaveInviteCode = async () => {
+    const code = inviteCodeDraft.trim();
+    if (!user || !code) return;
+    setSavingInviteCode(true);
+    setInviteCodeError(null);
+    try {
+      await set(inviteCodeRef(), {
+        code,
+        updatedAt: Date.now(),
+        updatedBy: user.uid,
+      });
+      setInviteCodeSaved(true);
+      setTimeout(() => setInviteCodeSaved(false), 2000);
+    } catch (err) {
+      console.error("[AdminPanel] Failed to save invite code:", err);
+      setInviteCodeError(
+        "Couldn't save the invite code — this usually means the updated database rules haven't been deployed yet (firebase deploy --only database)."
+      );
+    } finally {
+      setSavingInviteCode(false);
+    }
+  };
 
   const handleSendBroadcast = async () => {
     const msg = broadcastText.trim();
@@ -313,6 +375,81 @@ export default function AdminPanelPage() {
           <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
           <p className="text-xs text-emerald-400">
             Only the admin account can send broadcasts. Other users only see them on their dashboard.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Invite code tool ── */}
+      <div className="mt-5 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lime-500/15">
+            <KeyRound className="h-4 w-4 text-lime-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-white">Invite Code</h3>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Every new account needs this single code to register (email) or unlock the app (Google). Change it to invalidate the old one.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 rounded-xl border border-lime-500/25 bg-lime-500/10 px-3.5 py-3">
+          <KeyRound className="h-4 w-4 shrink-0 text-lime-400" />
+          <span className="font-mono text-base font-bold tracking-wider text-lime-300">
+            {currentInviteCode ?? <span className="text-sm font-medium text-lime-200/40">Not set yet</span>}
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            type="text"
+            value={inviteCodeDraft}
+            onChange={(e) => {
+              setInviteCodeDraft(e.target.value);
+              setInviteCodeSaved(false);
+              setInviteCodeError(null);
+            }}
+            placeholder="New invite code"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            className="min-w-0 flex-1 rounded-xl border border-cyan-500/30 bg-[#0a1628] px-3.5 py-2.5 font-mono text-sm text-white placeholder:text-slate-500 focus:border-lime-400/60 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={generateInviteCode}
+            className="flex items-center justify-center gap-2 rounded-xl border border-cyan-900/20 bg-[#0a1628] px-4 py-2.5 text-sm font-medium text-slate-300 transition-all hover:border-lime-500/30 hover:text-lime-300 active:scale-[0.98]"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Generate
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveInviteCode}
+            disabled={savingInviteCode || !inviteCodeDraft.trim()}
+            className="flex items-center justify-center gap-2 rounded-xl bg-lime-600 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-lime-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {savingInviteCode ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : inviteCodeSaved ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <KeyRound className="h-4 w-4" />
+            )}
+            {savingInviteCode ? "Saving…" : inviteCodeSaved ? "Saved!" : "Set Code"}
+          </button>
+        </div>
+
+        {inviteCodeError && (
+          <div className="mt-3 rounded-xl border border-red-800/40 bg-red-950/30 p-3">
+            <p className="text-xs text-red-400">{inviteCodeError}</p>
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-lime-500/20 bg-lime-500/10 px-3.5 py-2.5">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-lime-400" />
+          <p className="text-xs text-lime-400">
+            Share this code with the people you want to invite. Users who already verified stay unlocked when you change it.
           </p>
         </div>
       </div>

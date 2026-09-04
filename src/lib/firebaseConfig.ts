@@ -134,6 +134,33 @@ export function sessionRef(userId: string, sessionId: string, deviceId?: string)
   return ref(db, `users/${userId}/devices/${id}/sessions/${sessionId}`);
 }
 
+// ── Invite Code (registration gate) ────────────────────────
+
+/**
+ * Reference to the single shared invite code.
+ * Path: inviteCode
+ *
+ * Only the admin can read/write this node (see database.rules.json).
+ * Code validation happens server-side in the Cloud Functions, never
+ * in the browser.
+ *
+ * Shape: { code: string, updatedAt: number, updatedBy: string }
+ */
+export function inviteCodeRef(): DatabaseReference {
+  return ref(db, "inviteCode");
+}
+
+/**
+ * Reference to a user's invite-verification flag.
+ * Path: users/{uid}/verified
+ *
+ * Set to `true` only by the server (registerWithInvite / verifyInviteCode).
+ * While it is not `true`, the app is blocked by the invite-code popup.
+ */
+export function userVerifiedRef(userId: string): DatabaseReference {
+  return ref(db, `users/${userId}/verified`);
+}
+
 // ── User Settings ──────────────────────────────────────────
 
 /**

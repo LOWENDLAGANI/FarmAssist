@@ -11,6 +11,7 @@
  */
 
 import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { getDatabase } from "firebase-admin/database";
 import { getMessaging } from "firebase-admin/messaging";
 import { setGlobalOptions } from "firebase-functions/v2";
@@ -30,6 +31,165 @@ setGlobalOptions({ region: "asia-southeast1" });
 const ALERT_COOLDOWN_MS = 10 * 60 * 1000;
 const SMS_COOLDOWN_MS = 30 * 60 * 1000; // 30 min cooldown for SMS
 const OWNER_UID = "tsYo3zKfr8SSowOE23lPQe8Kb0v2";
+
+// ── Invite-code registration ────────────────────────────────────
+// Every new account must be unlocked with the single shared invite
+// code stored in the database at `inviteCode/code`.
+//
+//   • Email/password accounts are ONLY created server-side by
+//     `registerWithInvite`, which refuses to create the account when
+//     the code is missing or wrong.
+//   • Google accounts are created by Google first (unavoidable), then
+//     the app shows an unclosable popup that calls `verifyInviteCode`.
+//     Until it succeeds, `users/{uid}/verified` stays unverified and
+//     the popup keeps blocking the app.
+//   • `blockDirectSignup` rejects client-side email/password signup so
+//     nobody can bypass the invite code. (Admin SDK user creation does
+//     NOT trigger blocking functions, which is why the callable path
+//     still works.)
+
+/** Normalize an invite code for comparison: trim + case-insensitive. */
+function normalizeCode(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+/** Read the single shared invite code from the database. */
+async function getInviteCode(): Promise<string | null> {
+  const snap = await db.ref("inviteCode/code").get();
+  const code = snap.val();
+  return typeof code === "string" && code.trim() ? code : null;
+}
+
+/**
+ * Callable: creates an email/password account ONLY when the invite
+ * code is valid. The account is created with the Admin SDK and marked
+ * verified immediately — no account is created when the code is wrong.
+ *
+ * (A beforeUserCreated blocking function would also block raw client
+ * SDK signups, but it requires the project to be upgraded to Identity
+ * Platform — GCIP — which this project doesn't use. Without it, anyone
+ * who creates an account directly still gets locked behind the invite
+ * popup because users/{uid}/verified is only settable by the server.)
+ */
+export const registerWithInvite = onCall({}, async (request) => {
+  const { email, password, displayName, inviteCode } = (request.data ??
+    {}) as {
+    email?: unknown;
+    password?: unknown;
+    displayName?: unknown;
+    inviteCode?: unknown;
+  };
+
+  const cleanEmail =
+    typeof email === "string" ? email.trim().toLowerCase() : "";
+  const cleanPassword = typeof password === "string" ? password : "";
+  const cleanName = typeof displayName === "string" ? displayName.trim() : "";
+  const cleanCode = typeof inviteCode === "string" ? inviteCode : "";
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Please enter a valid email address."
+    );
+  }
+  if (cleanPassword.length < 6) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Your password needs at least 6 characters."
+    );
+  }
+  if (!cleanName || cleanName.length > 60) {
+    throw new HttpsError("invalid-argument", "Please enter your name.");
+  }
+  if (!cleanCode) {
+    throw new HttpsError(
+      "invalid-argument",
+      "An invite code is required to register."
+    );
+  }
+
+  const storedCode = await getInviteCode();
+  if (!storedCode) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Invite registration isn't configured yet. Ask the owner to set an invite code."
+    );
+  }
+  if (normalizeCode(cleanCode) !== normalizeCode(storedCode)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "That invite code isn't valid. Registration is invite-only — ask the owner for the code."
+    );
+  }
+
+  let uid: string;
+  try {
+    const user = await getAuth().createUser({
+      email: cleanEmail,
+      password: cleanPassword,
+      displayName: cleanName,
+    });
+    uid = user.uid;
+  } catch (err: any) {
+    logger.error(
+      "registerWithInvite createUser failed:",
+      err?.code ?? err?.message ?? err
+    );
+    if (err?.code === "auth/email-already-exists") {
+      throw new HttpsError(
+        "already-exists",
+        "An account with this email already exists."
+      );
+    }
+    throw new HttpsError(
+      "internal",
+      "Could not create your account right now. Please try again."
+    );
+  }
+
+  // Unlock the app for this account (server-side only write).
+  await db.ref(`users/${uid}/verified`).set(true);
+  logger.info(`New invite-registered user: ${uid} (${cleanEmail})`);
+  return { uid };
+});
+
+/**
+ * Callable: verifies the invite code for an already-existing account
+ * (used by the Google sign-up popup). The code is checked against the
+ * single stored code; `users/{uid}/verified` is only written when the
+ * code is correct. Wrong codes leave the account unverified.
+ */
+export const verifyInviteCode = onCall({}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Sign in to verify your invite code.");
+  }
+  const uid = request.auth.uid;
+  const { inviteCode } = (request.data ?? {}) as { inviteCode?: unknown };
+  const cleanCode = typeof inviteCode === "string" ? inviteCode : "";
+  if (!cleanCode) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Enter your invite code to continue."
+    );
+  }
+
+  const storedCode = await getInviteCode();
+  if (!storedCode) {
+    throw new HttpsError(
+      "failed-precondition",
+      "No invite code is set yet. Ask the owner to set one."
+    );
+  }
+  if (normalizeCode(cleanCode) !== normalizeCode(storedCode)) {
+    throw new HttpsError(
+      "permission-denied",
+      "That invite code isn't correct. Ask the owner for the current code and try again."
+    );
+  }
+
+  await db.ref(`users/${uid}/verified`).set(true);
+  return { verified: true };
+});
 
 // Lazy-load cached system prompt to prevent top-level initialization timeouts
 let cachedSystemPrompt: string | null = null;
