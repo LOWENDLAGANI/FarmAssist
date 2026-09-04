@@ -429,14 +429,13 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
 
     try {
       const newRef = push(commandsRef(userId, deviceId));
-    await set(newRef, {
-      action: action.id,
-      timestamp: Date.now(),
-      status: "pending",
-      parameters: action.parameters ?? null 
-});
-
-
+      await set(newRef, {
+        action: action.id,
+        timestamp: Date.now(),
+        status: "pending",
+        parameters:
+          Object.keys(pendingParams).length > 0 ? pendingParams : undefined,
+      });
       setResultStatus("success");
       setResultError(undefined);
     } catch (err) {
