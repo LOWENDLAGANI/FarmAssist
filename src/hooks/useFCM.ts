@@ -15,9 +15,85 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getToken, onMessage, type MessagePayload } from "firebase/messaging";
+import { getToken, onMessage, type Messaging, type MessagePayload } from "firebase/messaging";
 import { set } from "firebase/database";
 import { messaging, fcmTokenRef } from "@/lib/firebaseConfig";
+
+/** FCM service worker URL + scope (must match public/firebase-messaging-sw.js). */
+const SW_URL = "/firebase-messaging-sw.js";
+const SW_SCOPE = "/";
+const ACTIVATION_TIMEOUT_MS = 15_000;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Returns a live SW registration for the FCM worker that definitely has an
+ * active worker — registering it first if none exists yet. Throws if the
+ * browser has no Service Worker support or activation times out.
+ */
+async function ensureActiveServiceWorker(): Promise<ServiceWorkerRegistration> {
+  if (!("serviceWorker" in navigator)) {
+    throw new Error("Service workers are not supported in this browser");
+  }
+
+  let registration =
+    (await navigator.serviceWorker.getRegistration(SW_SCOPE)) ??
+    (await navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE }));
+
+  // register() resolves as soon as the worker script is installed —
+  // activation may still be in flight, and pushManager.subscribe() needs
+  // an ACTIVE worker. Wait for activation, then re-fetch the live
+  // registration so getToken() never receives a stale object whose
+  // .active is still null.
+  if (!registration.active) {
+    const activationTimeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error("Service worker activation timed out")),
+        ACTIVATION_TIMEOUT_MS
+      )
+    );
+    await Promise.race([navigator.serviceWorker.ready, activationTimeout]);
+    registration =
+      (await navigator.serviceWorker.getRegistration(SW_SCOPE)) ?? registration;
+  }
+
+  if (!registration.active) {
+    throw new Error("Service worker has no active worker");
+  }
+  return registration;
+}
+
+/**
+ * Fetches an FCM token, retrying with backoff when Chrome throws the
+ * intermittent "Subscription failed - no active Service Worker" AbortError —
+ * a known race where subscribe() fires in the same tick the worker finishes
+ * activating. Non-race failures bubble up immediately.
+ */
+async function fetchFcmTokenWithRetry(
+  messagingInstance: Messaging,
+  vapidKey: string
+): Promise<string | null> {
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const swRegistration = await ensureActiveServiceWorker();
+      const token = await getToken(messagingInstance, {
+        vapidKey,
+        serviceWorkerRegistration: swRegistration,
+      });
+      return token ?? null;
+    } catch (err) {
+      const activationRace =
+        err instanceof DOMException && err.name === "AbortError";
+      if (!activationRace || attempt === MAX_ATTEMPTS) throw err;
+      console.warn(
+        `[useFCM] Push subscribe raced service worker activation; retrying (${attempt}/${MAX_ATTEMPTS})...`
+      );
+      await wait(attempt * 1000);
+    }
+  }
+  return null;
+}
 
 export interface FCMState {
   /** Whether FCM is supported and permission was granted. */
@@ -98,41 +174,11 @@ export function useFCM(userId: string): FCMState {
             return;
           }
 
-          // Register the service worker if not already active.
-          // Firebase getToken() requires an active SW to subscribe to push.
-          let swRegistration: ServiceWorkerRegistration | undefined;
-          if ("serviceWorker" in navigator) {
-            swRegistration = await navigator.serviceWorker.getRegistration("/");
-            if (!swRegistration) {
-              console.log("[useFCM] Registering service worker...");
-              swRegistration = await navigator.serviceWorker.register(
-                "/firebase-messaging-sw.js",
-                { scope: "/" }
-              );
-            }
-
-            // register() resolves as soon as the worker is installed, but
-            // pushManager.subscribe() needs an ACTIVE worker. Waiting for
-            // navigator.serviceWorker.ready closes that race (the browser
-            // throws "no active Service Worker" otherwise).
-            if (!swRegistration.active) {
-              console.log("[useFCM] Waiting for service worker to activate...");
-              const activationTimeout = new Promise<never>((_, reject) =>
-                setTimeout(
-                  () => reject(new Error("Service worker activation timed out")),
-                  15000
-                )
-              );
-              await Promise.race([navigator.serviceWorker.ready, activationTimeout]);
-            }
-          }
-
-          const fcmToken = await getToken(
-            messaging,
-            swRegistration
-              ? { vapidKey, serviceWorkerRegistration: swRegistration }
-              : { vapidKey }
-          );
+          // Firebase getToken() requires an ACTIVE service worker to
+          // subscribe to push — fetch the token with an activation-safe
+          // registration and retry on Chrome's known activation race.
+          console.log("[useFCM] Fetching FCM token...");
+          const fcmToken = await fetchFcmTokenWithRetry(messaging, vapidKey);
           console.log("[useFCM] FCM token obtained:", !!fcmToken);
 
           if (fcmToken) {

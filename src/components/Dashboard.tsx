@@ -26,6 +26,7 @@ import { useCriticalAlerts } from "@/hooks/useCriticalAlerts";
 import { useFCM } from "@/hooks/useFCM";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
+import { useFullscreen } from "@/hooks/useFullscreen";
 import type { SensorKey } from "@/types/telemetry";
 import { generateRecommendations } from "@/lib/recommendations";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -135,6 +136,9 @@ export default function Dashboard() {
 
   // ── Keep the display awake while Rover Screen Mode is on ──
   useScreenWakeLock(roverMode);
+
+  // ── Force fullscreen while Rover Screen Mode is on ──
+  useFullscreen(roverMode);
 
   // ── Device-account linkage validation ──────────────────────
   const {
