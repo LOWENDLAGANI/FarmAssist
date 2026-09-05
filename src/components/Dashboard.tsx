@@ -272,13 +272,14 @@ export default function Dashboard() {
   const { broadcasts } = useBroadcasts(userId);
   const latestBroadcast = broadcasts[0] ?? null;
 
-  // ── Remote page control (admin → every device on this account) ──
-  // The admin "opens" a page from the Admin Panel; every iPad signed
-  // into this account follows instantly via the live Firebase listener.
-  // The admin's own device doesn't follow itself.
+  // ── Remote page control (admin → every signed-in device) ──
+  // The admin "opens" a page from the Admin Panel; every device signed
+  // in follows instantly via the live Firebase listener. The exact
+  // browser that sent the command skips itself (handled in the hook via
+  // a per-browser token), so the admin's presenting device stays put.
   const { pendingPage: remotePage, acknowledge: acknowledgeRemote } = useRemoteControl(
     userId,
-    !!userId && !isAdmin
+    !!userId
   );
   // Brief "following admin" indicator after a command lands.
   const [remoteControlActive, setRemoteControlActive] = useState(false);

@@ -288,12 +288,14 @@ export function broadcastRef(broadcastId: string): DatabaseReference {
 // ── Remote Control (admin → every device on this account) ───
 
 /**
- * Reference to the remote page-control command for a user's account.
+ * Reference to the remote page-control command for the signed-in account.
  * Path: users/{uid}/remote_control
  *
  * When the admin opens a page from the Admin Panel, this node is set
  * and every device signed into that account follows it in real time
  * (Dashboard listens with onValue, so no polling is needed).
+ *
+ * Uses the existing per-user rules (auth != null) — no extra deploy.
  *
  * Shape: {
  *   page: string,        // page id to open ("dashboard", "control", …)
