@@ -2,8 +2,8 @@
  * ControlPage.tsx
  * ─────────────────────────────────────────────────────────────────
  * Manual control page for the FarmAssist rover.
- * Provides actions like start watering, apply fertilizer,
- * manual override, and emergency stop — each with a
+ * Provides actions like apply fertilizer, toggle lights,
+ * and emergency stop — each with a
  * confirmation dialog before execution.
  *
  * Commands are written to Firebase RTDB at:
@@ -18,9 +18,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { push, set, onValue, off } from "firebase/database";
 import { commandsRef } from "@/lib/firebaseConfig";
 import {
-  Droplets,
   Flower2,
-  Hand,
   SprayCan,
   Power,
   AlertTriangle,
@@ -74,22 +72,6 @@ interface CommandLogEntry {
 
 const CONTROL_ACTIONS: ControlAction[] = [
   {
-    id: "watering",
-    label: "Start Watering",
-    description: "Activate the water pump to irrigate the soil",
-    icon: Droplets,
-    color: "text-blue-400",
-    bgColor: "bg-blue-500/15",
-    borderColor: "border-blue-500/30",
-    confirmTitle: "Start Watering?",
-    confirmMessage:
-      "This will activate the water pump for manual irrigation.",
-    params: [
-      { key: "duration", label: "Duration", type: "number", unit: "seconds", min: 1, max: 3600, step: 1, defaultValue: 30 },
-      { key: "intensity", label: "Flow Rate", type: "select", defaultValue: "medium", options: [{ value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }] },
-    ],
-  },
-  {
     id: "fertilizer",
     label: "Apply Fertilizer",
     description: "Dispense fertilizer for the soil",
@@ -115,18 +97,6 @@ const CONTROL_ACTIONS: ControlAction[] = [
     confirmTitle: "Toggle Lights?",
     confirmMessage:
       "This will switch the state of the LED",
-  },
-  {
-    id: "manual_override",
-    label: "Manual Override",
-    description: "Take full control of the rover",
-    icon: Hand,
-    color: "text-violet-400",
-    bgColor: "bg-violet-500/15",
-    borderColor: "border-violet-500/30",
-    confirmTitle: "Enable Manual Override?",
-    confirmMessage:
-      "This will disable all automatic routines and give you direct control over the rover. Automated schedules will be paused.",
   },
   {
     id: "spray",
@@ -515,10 +485,8 @@ export default function ControlPage({ userId, deviceId }: ControlPageProps) {
         <h3 className="mb-3 text-sm font-bold text-slate-300">Quick Presets</h3>
         <div className="flex flex-wrap gap-2">
           {[
-            { label: "Morning Routine", actions: ["lighting", "watering"] },
-            { label: "Evening Check", actions: ["watering"] },
-            { label: "Full Maintenance", actions: ["watering", "fertilizer", "lighting"] },
-            { label: "Water Only", actions: ["watering"] },
+            { label: "Lighting Check", actions: ["lighting"] },
+            { label: "Full Maintenance", actions: ["fertilizer", "lighting"] },
           ].map((preset) => (
             <button
               key={preset.label}
