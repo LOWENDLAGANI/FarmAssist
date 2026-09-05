@@ -15,7 +15,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { push, update, set, onValue, off, type DataSnapshot } from "firebase/database";
+import { push, update, set, remove, onValue, off, type DataSnapshot } from "firebase/database";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import {
   Megaphone,
@@ -35,6 +35,8 @@ import {
   Trash2,
   Lock,
   Unlock,
+  MonitorSmartphone,
+  MonitorUp,
 } from "lucide-react";
 import { useAuth } from "../AuthProvider";
 import {
@@ -49,6 +51,7 @@ import {
   inviteCodeRef,
   inviteConfigRef,
   bansRef,
+  remoteControlRef,
 } from "@/lib/firebaseConfig";
 import { ADMIN_UID } from "@/lib/adminConfig";
 import {
@@ -100,6 +103,13 @@ export default function AdminPanelPage() {
   const [allBans, setAllBans] = useState<
     Array<{ uid: string; record: BanRecord; active: boolean }>
   >([]);
+
+  // ── Remote page control state ──
+  // When sent, every device signed into this admin's account follows
+  // the chosen page instantly (live Firebase listener on each device).
+  const [remotePage, setRemotePage] = useState<string | null>(null);
+  const [sendingRemote, setSendingRemote] = useState<string | null>(null);
+  const [remoteSent, setRemoteSent] = useState<string | null>(null);
 
   // Live list of every ban record (admin-only read rule).
   useEffect(() => {
@@ -275,6 +285,58 @@ export default function AdminPanelPage() {
       console.error("[AdminPanel] Failed to stop broadcast:", err);
     } finally {
       setStoppingBroadcast(null);
+    }
+  };
+
+  // ── Remote page control ──
+  // Mirror of what every device is listening to, so the admin can see
+  // the last command issued and release it.
+  useEffect(() => {
+    if (!user) return;
+    const commandRef = remoteControlRef(user.uid);
+    const unsubscribe = onValue(commandRef, (snap: DataSnapshot) => {
+      const raw = snap.val() as { page?: unknown } | null;
+      setRemotePage(typeof raw?.page === "string" && raw.page ? raw.page : null);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  const REMOTE_PAGES: Array<{ id: string; label: string }> = [
+    { id: "dashboard", label: "Dashboard" },
+    { id: "control", label: "Control" },
+    { id: "notifications", label: "Notifications" },
+    { id: "history", label: "History" },
+    { id: "settings", label: "Settings" },
+    { id: "about", label: "About" },
+  ];
+
+  const handleSendRemotePage = async (page: string) => {
+    if (!user || sendingRemote) return;
+    setSendingRemote(page);
+    setRemoteSent(null);
+    try {
+      await set(remoteControlRef(user.uid), {
+        page,
+        issuedAt: Date.now(),
+        issuedBy: user.uid,
+      });
+      setRemotePage(page);
+      setRemoteSent(page);
+      setTimeout(() => setRemoteSent((cur) => (cur === page ? null : cur)), 2000);
+    } catch (err) {
+      console.error("[AdminPanel] Failed to send remote page command:", err);
+    } finally {
+      setSendingRemote(null);
+    }
+  };
+
+  const handleReleaseRemote = async () => {
+    if (!user) return;
+    try {
+      await remove(remoteControlRef(user.uid));
+      setRemotePage(null);
+    } catch (err) {
+      console.error("[AdminPanel] Failed to release remote control:", err);
     }
   };
 
@@ -736,6 +798,79 @@ export default function AdminPanelPage() {
             {inviteRequired
               ? "Share this code with the people you want to invite. Users who already verified stay unlocked when you change it."
               : "The saved code below isn't being enforced right now. Switching back to Invite-only makes it required again."}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Remote page control ── */}
+      <div className="order-4 mt-5 rounded-2xl border border-cyan-900/20 bg-[#0c1a2e] p-5 animate-slide-up md:order-none md:mt-5">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/15">
+            <MonitorSmartphone className="h-4 w-4 text-cyan-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-white">Remote Control</h3>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Open a page on every device signed into this account — iPads follow instantly.
+            </p>
+          </div>
+          {remotePage && (
+            <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-400">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-500" />
+              </span>
+              OPEN: {REMOTE_PAGES.find((p) => p.id === remotePage)?.label ?? remotePage}
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {REMOTE_PAGES.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => handleSendRemotePage(p.id)}
+              disabled={sendingRemote !== null}
+              className={`flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-center transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
+                remotePage === p.id
+                  ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-300"
+                  : "border-cyan-900/20 bg-[#0a1628] text-slate-300 hover:border-cyan-500/30 hover:text-slate-100"
+              }`}
+            >
+              <MonitorUp className="h-4 w-4" />
+              <span className="text-xs font-semibold">{p.label}</span>
+              <span className="text-[10px] text-slate-500">
+                {sendingRemote === p.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : remoteSent === p.id ? (
+                  <Check className="h-3 w-3 text-cyan-400" />
+                ) : remotePage === p.id ? (
+                  "Open now"
+                ) : (
+                  "Open on all devices"
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleReleaseRemote}
+            disabled={!remotePage}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-600/30 bg-slate-600/10 px-4 py-2.5 text-sm font-medium text-slate-300 transition-all hover:bg-slate-600/20 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <X className="h-4 w-4" />
+            Release devices
+          </button>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3.5 py-2.5">
+          <MonitorSmartphone className="h-4 w-4 shrink-0 text-cyan-400" />
+          <p className="text-xs text-cyan-400">
+            Every device on this account follows the chosen page in real time — no refresh needed. Tap a page again to re-send it (e.g. for devices that came online late).
           </p>
         </div>
       </div>

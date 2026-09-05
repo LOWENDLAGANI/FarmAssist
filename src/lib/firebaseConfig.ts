@@ -9,6 +9,7 @@
  *   • users/{uid}/devices/{deviceId}/history   — chart history
  *   • users/{uid}/devices/{deviceId}/ranges    — sensor thresholds
  *   • users/{uid}/devices/{deviceId}/sessions  — logging sessions
+ *   • users/{uid}/remote_control               — admin page-control commands
  *   • broadcasts/{id}                         — admin broadcast messages (banner/popup/both)
  * ─────────────────────────────────────────────────────────────────
  */
@@ -282,6 +283,26 @@ export function broadcastsRef(): DatabaseReference {
  */
 export function broadcastRef(broadcastId: string): DatabaseReference {
   return ref(db, `broadcasts/${broadcastId}`);
+}
+
+// ── Remote Control (admin → every device on this account) ───
+
+/**
+ * Reference to the remote page-control command for a user's account.
+ * Path: users/{uid}/remote_control
+ *
+ * When the admin opens a page from the Admin Panel, this node is set
+ * and every device signed into that account follows it in real time
+ * (Dashboard listens with onValue, so no polling is needed).
+ *
+ * Shape: {
+ *   page: string,        // page id to open ("dashboard", "control", …)
+ *   issuedAt: number,    // Date.now() — each new command has a fresh stamp
+ *   issuedBy: string,    // admin UID who sent it
+ * }
+ */
+export function remoteControlRef(userId: string): DatabaseReference {
+  return ref(db, `users/${userId}/remote_control`);
 }
 
 // ── Bans (admin) ────────────────────────────────────────────

@@ -34,11 +34,13 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { ref, remove } from "firebase/database";
 import { db } from "@/lib/firebaseConfig";
 import { useBroadcasts } from "@/hooks/useBroadcast";
+import { useRemoteControl } from "@/hooks/useRemoteControl";
 import { isAdminUser } from "@/lib/adminConfig";
 import { isOnboardingDone } from "./OnboardingWizard";
 import { alertUser } from "@/lib/notificationSound";
 import ErrorBoundary from "./ErrorBoundary";
 import BroadcastBanner from "./BroadcastBanner";
+import RemoteControlBanner from "./RemoteControlBanner";
 import BroadcastModal from "./BroadcastModal";
 import OnboardingWizard from "./OnboardingWizard";
 import ChangelogModal from "./ChangelogModal";
@@ -82,6 +84,18 @@ const SENSOR_KEYS: SensorKey[] = ["temperature", "moisture", "waterLevel", "ligh
 
 /** Stagger delay classes for sensor cards */
 const STAGGER_CLASSES = ["stagger-1", "stagger-2", "stagger-3", "stagger-4"];
+
+/** Human-readable labels for remote-control indicator banner. */
+const PAGE_LABELS: Record<string, string> = {
+  dashboard: "Dashboard",
+  control: "Control",
+  notifications: "Notifications",
+  history: "History",
+  account: "Account",
+  settings: "Settings",
+  about: "About",
+  admin: "Admin Panel",
+};
 
 
 export default function Dashboard() {
@@ -258,6 +272,29 @@ export default function Dashboard() {
   const { broadcasts } = useBroadcasts(userId);
   const latestBroadcast = broadcasts[0] ?? null;
 
+  // ── Remote page control (admin → every device on this account) ──
+  // The admin "opens" a page from the Admin Panel; every iPad signed
+  // into this account follows instantly via the live Firebase listener.
+  // The admin's own device doesn't follow itself.
+  const { pendingPage: remotePage, acknowledge: acknowledgeRemote } = useRemoteControl(
+    userId,
+    !!userId && !isAdmin
+  );
+  // Brief "following admin" indicator after a command lands.
+  const [remoteControlActive, setRemoteControlActive] = useState(false);
+  const remoteIndicatorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!remotePage) return;
+    setActivePage(remotePage);
+    acknowledgeRemote();
+    setRemoteControlActive(true);
+    if (remoteIndicatorTimer.current) clearTimeout(remoteIndicatorTimer.current);
+    remoteIndicatorTimer.current = setTimeout(() => setRemoteControlActive(false), 6000);
+    return () => {
+      if (remoteIndicatorTimer.current) clearTimeout(remoteIndicatorTimer.current);
+    };
+  }, [remotePage, acknowledgeRemote]);
+
   // ── Session actions (simplified) ─────
   const handleStartSession = useCallback(
     async (name?: string) => {
@@ -352,6 +389,11 @@ export default function Dashboard() {
       {/* Admin broadcast banners (stacked) */}
       {broadcasts.map((b) =>
         b.mode !== "popup" ? <BroadcastBanner key={b.id} broadcast={b} /> : null
+      )}
+
+      {/* Remote-control indicator — shown while following an admin command */}
+      {remoteControlActive && (
+        <RemoteControlBanner pageLabel={PAGE_LABELS[activePage] ?? activePage} />
       )}
 
       {/* Ownership denied overlay */}
