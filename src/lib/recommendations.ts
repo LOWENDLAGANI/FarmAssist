@@ -34,6 +34,12 @@ const DEFAULT_THRESHOLDS = {
     low: 15,     // Below 15% — refill reservoir
     critical: 5, // Below 5% — empty
   },
+  battery: {
+    low: 20,      // Below 20% — needs charging
+    critical: 10, // Below 10% — emergency / system may shut down
+    optimalMin: 40,
+    optimalMax: 80,
+  },
 };
 
 let recommendationIdCounter = 0;
@@ -84,6 +90,12 @@ function buildThresholds(ranges?: SensorRanges) {
     waterLevel: {
       low: ranges.waterLevel.optimalMin > 15 ? ranges.waterLevel.optimalMin : 15,
       critical: 5,
+    },
+    battery: {
+      low: ranges.battery?.optimalMin ?? DEFAULT_THRESHOLDS.battery.low,
+      critical: ranges.battery?.optimalMin ? ranges.battery.optimalMin - 10 : DEFAULT_THRESHOLDS.battery.critical,
+      optimalMin: ranges.battery?.optimalMin ?? DEFAULT_THRESHOLDS.battery.optimalMin,
+      optimalMax: ranges.battery?.optimalMax ?? DEFAULT_THRESHOLDS.battery.optimalMax,
     },
   };
 }
@@ -308,6 +320,91 @@ export function generateRecommendations(
           "Consider tracking daily consumption to predict refill needs",
         ],
         96
+      )
+    );
+  }
+
+  // ── Battery ──────────────────────────────────────────────────
+  const b = data.battery ?? 100;
+  if (b < THRESHOLDS.battery.critical) {
+    recs.push(
+      makeRec(
+        "battery",
+        "critical",
+        `Battery critically low (${b.toFixed(0)}%) — immediate charging required`,
+        "AlertTriangle",
+        `The device battery has dropped to ${b.toFixed(0)}%, which is below the critical threshold of ${THRESHOLDS.battery.critical}%. At this level, the device is at imminent risk of powering off, which would interrupt all sensor readings, irrigation control, and monitoring. An unexpected shutdown could also cause data loss and leave crops unmonitored during critical periods.`,
+        [
+          "Connect the device to a power source immediately to prevent shutdown",
+          "If using a solar setup, check that panels are clean and properly oriented",
+          "Consider enabling low-power mode to extend runtime while charging",
+          "If battery continues to drain rapidly, inspect for parasitic drain or battery degradation",
+          "After charging, verify battery health — if it doesn't hold charge, consider replacement",
+        ],
+        97
+      )
+    );
+  } else if (b < THRESHOLDS.battery.low) {
+    recs.push(
+      makeRec(
+        "battery",
+        "warning",
+        `Battery low (${b.toFixed(0)}%) — schedule charging soon`,
+        "Battery",
+        `Battery level at ${b.toFixed(0)}% is below the recommended minimum of ${THRESHOLDS.battery.low}%. While the system can continue operating, you should plan to recharge soon to avoid being caught with a dead battery. Lithium batteries perform best when kept above 20% — deep discharges accelerate capacity degradation over time.`,
+        [
+          "Schedule charging within the next few hours",
+          "If on a solar setup, ensure panels receive adequate sunlight today",
+          "Avoid running high-power operations (like watering) until battery is topped up",
+          "Monitor battery trend — if it's dropping faster than usual, investigate the cause",
+        ],
+        85
+      )
+    );
+  } else if (b < THRESHOLDS.battery.optimalMin) {
+    recs.push(
+      makeRec(
+        "battery",
+        "info",
+        `Battery level moderate (${b.toFixed(0)}%) — within safe range`,
+        "Battery",
+        `Battery is at ${b.toFixed(0)}%, which is above the critical threshold but below the optimal range of ${THRESHOLDS.battery.optimalMin}–${THRESHOLDS.battery.optimalMax}%. The system will continue to function normally, but for best battery longevity, consider topping up when convenient. Keeping lithium batteries in the 40–80% range minimizes stress on the cells and extends overall battery lifespan.`,
+        [
+          "No immediate action needed — battery is safe for continued operation",
+          "If possible, top up to the optimal range during your next maintenance window",
+          "Track battery discharge rate to predict how long until the next charge is needed",
+        ],
+        90
+      )
+    );
+  } else if (b > THRESHOLDS.battery.optimalMax) {
+    recs.push(
+      makeRec(
+        "battery",
+        "info",
+        `Battery well charged (${b.toFixed(0)}%) — excellent condition`,
+        "Battery",
+        `Battery level at ${b.toFixed(0)}% is in the optimal range, providing ample power for all system operations. The device can run for extended periods without needing a recharge. This is the ideal state for battery health and system reliability.`,
+        [
+          "No action required — battery is in excellent condition",
+          "Continue normal monitoring — battery should last through the next cycle",
+        ],
+        98
+      )
+    );
+  } else {
+    recs.push(
+      makeRec(
+        "battery",
+        "info",
+        `Battery level good (${b.toFixed(0)}%)`,
+        "Battery",
+        `Battery is at ${b.toFixed(0)}%, which is a healthy level for continued operation. The system has sufficient power reserves to handle sensor readings, irrigation control, and data transmission without interruption.`,
+        [
+          "No immediate action required",
+          "Continue regular monitoring of battery level",
+        ],
+        95
       )
     );
   }

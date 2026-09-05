@@ -56,7 +56,7 @@ export default function WelcomeBanner({ userName }: WelcomeBannerProps) {
         </h1>
 
         <p className="max-w-md text-sm leading-relaxed text-emerald-100/90 sm:text-base">
-          FarmAssist is the best IOT dashboard in the market created by Minetallest. It will make your farm easier to manage
+          FarmAssist's dashboard is equipped with all the data information you need to monitor your farms health and performance!
         </p>
       </div>
     </section>

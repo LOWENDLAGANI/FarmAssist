@@ -74,7 +74,9 @@ export default function ChartSection({
               ? (point.waterLevel ?? point.value)
               : activeSensor === "light"
                 ? (point.light ?? point.value)
-                : point.value,
+                : activeSensor === "battery"
+                  ? (point.battery ?? point.value)
+                  : point.value,
     }));
   }, [history, activeSensor, pointCount]);
 

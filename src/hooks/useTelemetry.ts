@@ -111,21 +111,22 @@ export function useTelemetry(
             const val = childSnap.val();
             if (!val) return;
 
-            // Support both schemas:
-            //   Frontend: { timestamp, value, temperature, moisture, waterLevel, light }
-            //   ESP32:    { timestamp, value, timestamp_epoch, temperature, moisture, waterLevel, light }
-            const ts = val.timestamp ?? val.timestamp_epoch;
-            if (typeof ts !== "number") return;
+          // Support both schemas:
+          //   Frontend: { timestamp, value, temperature, moisture, waterLevel, light, battery }
+          //   ESP32:    { timestamp, value, timestamp_epoch, temperature, moisture, waterLevel, light, battery }
+          const ts = val.timestamp ?? val.timestamp_epoch;
+          if (typeof ts !== "number") return;
 
-            const temp = val.temperature ?? val.value ?? 0;
-            points.push({
-              timestamp: ts > 1e12 ? ts : ts * 1000, // normalise to ms
-              value: val.value ?? temp,
-              temperature: val.temperature ?? temp,
-              moisture: val.moisture ?? 0,
-              waterLevel: val.waterLevel ?? 0,
-              light: val.light ?? 0,
-            });
+          const temp = val.temperature ?? val.value ?? 0;
+          points.push({
+            timestamp: ts > 1e12 ? ts : ts * 1000, // normalise to ms
+            value: val.value ?? temp,
+            temperature: val.temperature ?? temp,
+            moisture: val.moisture ?? 0,
+            waterLevel: val.waterLevel ?? 0,
+            light: val.light ?? 0,
+            battery: val.battery ?? 100,
+          });
           });
           points.sort((a, b) => a.timestamp - b.timestamp);
           setHistory(points);
@@ -216,6 +217,7 @@ export function useTelemetry(
               moisture: telemetry.moisture,
               waterLevel: telemetry.waterLevel,
               light: telemetry.light,
+              battery: telemetry.battery,
             }).then(() => {
               // Prune old entries beyond limit
               get(sensorHistoryRef(userId, deviceId)).then((snap) => {

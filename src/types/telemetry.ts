@@ -44,6 +44,7 @@ export interface ChartDataPoint {
   moisture?: number;
   waterLevel?: number;
   light?: number;
+  battery?: number;
 }
 
 /**

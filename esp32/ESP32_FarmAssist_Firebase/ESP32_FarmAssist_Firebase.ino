@@ -405,11 +405,29 @@ float placeholderWave(float minVal, float maxVal, unsigned long periodMs, float 
 void sampleSensors() {
   sampleCount++;
 
+  // Battery voltage reading (ESP32 internal ADC, rough estimate)
+  // On most ESP32 boards, the internal ADC can read VDD voltage via GPIO test pads
+  // This is a simplified estimation - for accurate readings, use an external voltage divider
+  int batteryPin = 36; // GPIO36 (VP) - input only pin, suitable for battery monitoring
+  int batteryRaw = analogRead(batteryPin);
+  // ESP32 ADC is 12-bit (0-4095), reference voltage is typically ~3.3V when powered via USB
+  // This is a rough conversion - calibrate for your specific hardware
+  // For a 3.7V Li-ion battery with a voltage divider, you'd convert the voltage to %
+  // Here we use a simple estimation: 0-4095 range mapped to 0-100%
+  int batteryVal = constrain(map(batteryRaw, 0, 4095, 0, 100), 0, 100);
+  
+  // If battery reading fails or is unrealistic, use a default value
+  if (batteryVal < 5 || batteryVal > 95) {
+    batteryVal = 80; // Default assumption when no reliable battery data
+  }
+  
   if (USE_PLACEHOLDER_DATA) {
     moistureVal = (int)placeholderWave(20, 80, 60000, 0.0);
     temperatureVal = placeholderWave(22.0, 34.0, 90000, 1.0);
     waterLevelVal = (int)placeholderWave(10, 100, 45000, 2.0);
     lightVal = (int)placeholderWave(0, 100, 30000, 3.0);
+    // Use a slowly varying battery value for placeholder mode
+    batteryVal = (int)placeholderWave(60, 100, 120000, 4.0);
   } else {
     soilVal = analogRead(soilPin);
     moistureVal = constrain(map(soilVal, drySoil, wetSoil, 0, 100), 0, 100);
@@ -452,6 +470,7 @@ void sampleSensors() {
     latestJson.set("light", lightVal);
     latestJson.set("timestamp_epoch", epoch);
     latestJson.set("timestamp_str", timeStr);
+    latestJson.set("battery", batteryVal);
 
     if (!isOwner) {
       Serial.println(nowPrefix() + "[Latest] SKIPPED - not the registered owner. Update USER_UID to: " + cfgUserUid);
@@ -518,6 +537,7 @@ void saveHistoryToFirebase() {
   json.set("timestamp", (double)now * 1000.0);
   json.set("timestamp_epoch", (double)now);
   json.set("timestamp_str", timeStr);
+  json.set("battery", batteryVal);
 
   Serial.println(nowPrefix() + "[History] Writing to: " + basePath);
   Serial.println(nowPrefix() + "[History]   Moisture=" + String(moistureVal) +
